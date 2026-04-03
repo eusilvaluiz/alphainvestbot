@@ -171,7 +171,7 @@ const AiAnalysisToast = ({
             <Brain className="w-3.5 h-3.5 text-primary" />
           </div>
           <span className="text-xs font-semibold text-primary flex items-center gap-1">
-            IA Analisando
+            IA - {selectedModel === "gpt" ? "ChatGPT" : selectedModel === "claude" ? "Claude Opus" : "Grok"}
             <Sparkles className="w-3 h-3" />
           </span>
           <button

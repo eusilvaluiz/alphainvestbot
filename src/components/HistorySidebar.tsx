@@ -78,7 +78,20 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
           </span>
         </div>
         {isOpen && (
-          <span className="text-xs font-mono text-primary">{timeLeft}</span>
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                liveWinning
+                  ? "bg-chart-green/20 text-chart-green"
+                  : liveTied
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-chart-red/20 text-chart-red"
+              }`}
+            >
+              {liveWinning ? "WIN" : liveTied ? "—" : "LOSS"}
+            </span>
+            <span className="text-xs font-mono text-primary">{timeLeft}</span>
+          </div>
         )}
         {isWin && (
           <span className="text-xs font-semibold px-2 py-0.5 rounded bg-chart-green/20 text-chart-green">

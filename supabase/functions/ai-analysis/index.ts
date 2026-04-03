@@ -87,7 +87,6 @@ Gere UMA análise curta sobre o momento atual deste ativo.`;
     }
 
     const data = await response.json();
-    console.log("AI response data:", JSON.stringify(data));
     const analysis = data.choices?.[0]?.message?.content?.trim() || "";
 
     return new Response(JSON.stringify({ analysis, model: aiModel }), {

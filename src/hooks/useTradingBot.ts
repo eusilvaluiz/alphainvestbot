@@ -127,8 +127,9 @@ export const useTradingBot = () => {
       setStatus("Analisando...");
 
       try {
-        // Wait for next entry timing (7-14s delay like base site)
-        await waitForNextEntry();
+        // Wait for candle open (second 00 of next minute)
+        setStatus("Aguardando candle...");
+        await waitForCandleOpen();
 
         if (!botRef.current.running) return;
 

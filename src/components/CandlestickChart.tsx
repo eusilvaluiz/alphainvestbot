@@ -39,35 +39,35 @@ const CandlestickChart = () => {
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "hsl(220, 10%, 55%)",
+        textColor: "#7a8299",
         fontFamily: "Inter, sans-serif",
       },
       grid: {
-        vertLines: { color: "hsl(220, 15%, 13%)" },
-        horzLines: { color: "hsl(220, 15%, 13%)" },
+        vertLines: { color: "#1e2430" },
+        horzLines: { color: "#1e2430" },
       },
       width: chartContainerRef.current.clientWidth,
       height: 300,
       crosshair: {
-        vertLine: { color: "hsl(160, 60%, 40%)", width: 1 },
-        horzLine: { color: "hsl(160, 60%, 40%)", width: 1 },
+        vertLine: { color: "#2e8b57", width: 1 },
+        horzLine: { color: "#2e8b57", width: 1 },
       },
       timeScale: {
-        borderColor: "hsl(220, 15%, 18%)",
+        borderColor: "#262d3a",
         timeVisible: true,
       },
       rightPriceScale: {
-        borderColor: "hsl(220, 15%, 18%)",
+        borderColor: "#262d3a",
       },
     });
 
     const series = chart.addCandlestickSeries({
-      upColor: "hsl(145, 65%, 45%)",
-      downColor: "hsl(0, 70%, 55%)",
-      borderUpColor: "hsl(145, 65%, 45%)",
-      borderDownColor: "hsl(0, 70%, 55%)",
-      wickUpColor: "hsl(145, 65%, 45%)",
-      wickDownColor: "hsl(0, 70%, 55%)",
+      upColor: "#28a745",
+      downColor: "#dc3545",
+      borderUpColor: "#28a745",
+      borderDownColor: "#dc3545",
+      wickUpColor: "#28a745",
+      wickDownColor: "#dc3545",
     });
 
     const data = generateCandleData();

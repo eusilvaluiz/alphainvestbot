@@ -18,6 +18,12 @@ export default defineConfig(({ mode }) => ({
         rewrite: (path) => path.replace(/^\/alpha-api/, "/api"),
         secure: true,
       },
+      "/unic-api": {
+        target: "https://unicbroker.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/unic-api/, "/publicapi"),
+        secure: true,
+      },
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),

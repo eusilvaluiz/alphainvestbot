@@ -1,4 +1,4 @@
-import { ArrowUp, ArrowDown, History, X } from "lucide-react";
+import { ArrowUp, ArrowDown, History, Trash2 } from "lucide-react";
 import { type TradeEntry } from "@/hooks/useTradingBot";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 
 interface HistorySidebarProps {
   entries: TradeEntry[];
+  onClearHistory?: () => void;
 }
 
 const TradeCard = ({ entry }: { entry: TradeEntry }) => {
@@ -152,8 +153,17 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
   );
 };
 
-const HistoryContent = ({ entries }: { entries: TradeEntry[] }) => (
-  <div className="flex-1 overflow-y-auto px-3 py-3">
+const HistoryContent = ({ entries, onClearHistory }: { entries: TradeEntry[]; onClearHistory?: () => void }) => (
+  <div className="flex-1 overflow-y-auto px-3 py-3 scrollbar-hide">
+    {entries.length > 0 && onClearHistory && (
+      <button
+        onClick={onClearHistory}
+        className="w-full flex items-center justify-center gap-2 mb-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+      >
+        <Trash2 size={13} />
+        Limpar histórico
+      </button>
+    )}
     {entries.length === 0 ? (
       <p className="text-sm text-muted-foreground text-center mt-8">
         Nenhuma operação ainda
@@ -167,9 +177,7 @@ const HistoryContent = ({ entries }: { entries: TradeEntry[] }) => (
 );
 
 /** Floating button + Sheet drawer for mobile/tablet (below xl) */
-export const HistoryDrawer = ({ entries = [] }: HistorySidebarProps) => {
-  const openCount = entries.filter((e) => e.status === "open").length;
-
+export const HistoryDrawer = ({ entries = [], onClearHistory }: HistorySidebarProps) => {
   return (
     <div className="xl:hidden fixed bottom-4 right-4 z-50">
       <Sheet>
@@ -193,7 +201,7 @@ export const HistoryDrawer = ({ entries = [] }: HistorySidebarProps) => {
               Histórico
             </SheetTitle>
           </SheetHeader>
-          <HistoryContent entries={entries} />
+          <HistoryContent entries={entries} onClearHistory={onClearHistory} />
         </SheetContent>
       </Sheet>
     </div>
@@ -201,7 +209,7 @@ export const HistoryDrawer = ({ entries = [] }: HistorySidebarProps) => {
 };
 
 /** Desktop sidebar (xl+) */
-const HistorySidebar = ({ entries = [] }: HistorySidebarProps) => {
+const HistorySidebar = ({ entries = [], onClearHistory }: HistorySidebarProps) => {
   return (
     <div className="bg-card rounded-lg border border-border h-full flex flex-col">
       <div className="px-4 py-3 border-b border-border">
@@ -209,7 +217,7 @@ const HistorySidebar = ({ entries = [] }: HistorySidebarProps) => {
           Histórico
         </h2>
       </div>
-      <HistoryContent entries={entries} />
+      <HistoryContent entries={entries} onClearHistory={onClearHistory} />
     </div>
   );
 };

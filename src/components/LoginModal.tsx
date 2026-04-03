@@ -54,9 +54,7 @@ const LoginModal = ({ open, onOpenChange }: LoginModalProps) => {
 
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-              <span className="font-heading text-lg font-bold text-primary-foreground">A</span>
-            </div>
+            <img src={logoImg} alt="Alpha Bot" className="h-8" />
             <div>
               <h2 className="font-heading text-lg font-semibold text-foreground">Entrar</h2>
               <p className="text-sm text-muted-foreground">Use os mesmos dados da sua conta Unic Broker</p>

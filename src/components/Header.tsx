@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { Menu, LogOut, User, Settings, Link } from "lucide-react";
+import logoImg from "@/assets/alphabot.png";
 
 interface HeaderProps {
   onLoginClick: () => void;

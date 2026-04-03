@@ -18,7 +18,12 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY)
       throw new Error("LOVABLE_API_KEY is not configured");
 
-    const aiModel = model || "google/gemini-3-flash-preview";
+    const modelMap: Record<string, string> = {
+      gpt: "openai/gpt-5-mini",
+      claude: "google/gemini-2.5-pro",
+      grok: "google/gemini-3-flash-preview",
+    };
+    const aiModel = modelMap[model] || model || "google/gemini-3-flash-preview";
 
     const systemPrompt = `Você é um analista de mercado financeiro especializado em opções binárias e criptomoedas.
 Seu papel é gerar análises curtas e incisivas sobre o ativo que o trader está observando.

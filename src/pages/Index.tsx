@@ -7,6 +7,7 @@ import ControlPanel from "@/components/ControlPanel";
 import ConfigPanel from "@/components/ConfigPanel";
 import HistorySidebar, { HistoryDrawer } from "@/components/HistorySidebar";
 import LoginModal from "@/components/LoginModal";
+import AiAnalysisToast from "@/components/AiAnalysisToast";
 import { useAuth } from "@/hooks/useAuth";
 import { useTradingBot } from "@/hooks/useTradingBot";
 import { alphaApi, type Symbol as ApiSymbol } from "@/lib/api";

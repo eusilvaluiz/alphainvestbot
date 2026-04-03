@@ -103,9 +103,8 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | null> {
 }
 
 const BRAND_URL = "unicbroker.com";
-const HISTORICAL_SYNC_INTERVAL_MS = 1000;
+const HISTORICAL_SYNC_INTERVAL_MS = 5000;
 const REALTIME_SYNC_DEBOUNCE_MS = 700;
-const FORCE_FRESH_SESSION_EVERY_MS = 3000;
 
 const parseNumber = (value: unknown) => {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;

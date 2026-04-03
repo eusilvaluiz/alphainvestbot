@@ -149,6 +149,82 @@ const parseRealtimeTick = (input: unknown): { closePrice: number; timestamp: num
   return null;
 };
 
+/* ── Symbol Picker Modal ── */
+const SymbolPickerModal = ({
+  symbols,
+  selectedSymbol,
+  onSelect,
+  onClose,
+}: {
+  symbols: ApiSymbol[];
+  selectedSymbol: ApiSymbol | null;
+  onSelect: (s: ApiSymbol) => void;
+  onClose: () => void;
+}) => {
+  const [search, setSearch] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return symbols;
+    const q = search.toLowerCase();
+    return symbols.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.code.toLowerCase().includes(q)
+    );
+  }, [symbols, search]);
+
+  return (
+    <div className="absolute top-full left-0 mt-2 bg-card border border-border rounded-xl shadow-2xl z-50 w-72 overflow-hidden">
+      {/* Search */}
+      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
+        <Search size={16} className="text-muted-foreground shrink-0" />
+        <input
+          ref={inputRef}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar ativo..."
+          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+        />
+        {search && (
+          <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* List */}
+      <div className="max-h-72 overflow-y-auto scrollbar-none">
+        {filtered.length === 0 ? (
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+            Nenhum ativo encontrado
+          </div>
+        ) : (
+          filtered.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => onSelect(s)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-colors ${
+                selectedSymbol?.id === s.id
+                  ? "bg-primary/10 text-primary"
+                  : "text-foreground hover:bg-secondary"
+              }`}
+            >
+              <img src={s.img} alt={s.name} className="w-6 h-6 rounded-full" />
+              <span className="font-medium">{s.name}</span>
+              <span className="ml-auto text-xs text-muted-foreground">{s.code}</span>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
 const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpdate, activeTrades = [] }: CandlestickChartProps) => {
   const { isBrokerConnected } = useAuth();
   const chartContainerRef = useRef<HTMLDivElement>(null);

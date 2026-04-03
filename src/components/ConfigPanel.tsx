@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -6,6 +6,7 @@ type AiModel = "grok" | "claude" | "gpt";
 
 interface ConfigPanelProps {
   isLoggedIn: boolean;
+  balance: number;
   onStart: (config: {
     entryValue: number;
     position: number;
@@ -15,12 +16,22 @@ interface ConfigPanelProps {
   }) => void;
 }
 
-const ConfigPanel = ({ isLoggedIn, onStart }: ConfigPanelProps) => {
+const ConfigPanel = ({ isLoggedIn, balance, onStart }: ConfigPanelProps) => {
   const [entryValue, setEntryValue] = useState("10");
   const [position, setPosition] = useState("3");
   const [stopWin, setStopWin] = useState("500");
   const [stopLoss, setStopLoss] = useState("100");
   const [selectedModel, setSelectedModel] = useState<AiModel>("grok");
+
+  // Auto-calculate based on balance when logged in
+  useEffect(() => {
+    if (isLoggedIn && balance > 0) {
+      const entry = Math.round(balance * 0.05);
+      setEntryValue(String(entry));
+      setStopWin(String(entry * 10));
+      setStopLoss(String(entry * 5));
+    }
+  }, [isLoggedIn, balance]);
 
   const models: { id: AiModel; label: string }[] = [
     { id: "grok", label: "Grok 4.1" },
@@ -93,13 +104,12 @@ const ConfigPanel = ({ isLoggedIn, onStart }: ConfigPanelProps) => {
                 type="number"
                 value={stopLoss}
                 onChange={(e) => setStopLoss(e.target.value)}
-                className="pl-9 bg-secondary border-border text-foreground"
+                className="pl-9 bg-secondary border-border text-foreground text-chart-red"
               />
             </div>
           </div>
         </div>
 
-        {/* AI Model Selection */}
         <div className="grid grid-cols-3 gap-2">
           {models.map((model) => (
             <Button
@@ -114,14 +124,13 @@ const ConfigPanel = ({ isLoggedIn, onStart }: ConfigPanelProps) => {
           ))}
         </div>
 
-        {/* Action Button */}
         <Button
           variant="trading"
           className="w-full"
           onClick={handleStart}
           disabled={!isLoggedIn}
         >
-          {isLoggedIn ? "Iniciar" : "Login Necessário"}
+          {isLoggedIn ? "Start" : "Login Necessário"}
         </Button>
       </div>
     </div>

@@ -47,7 +47,6 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
     const xsrfToken = decodeURIComponent(xsrfValue);
     const cookies = Array.from(cookieMap.values()).join("; ");
 
-    // Login with correct field names: user + pass (not email + password)
     const loginRes = await fetch(`${UNIC_BASE}/publicapi/auth/login/web`, {
       method: "POST",
       headers: {
@@ -65,9 +64,7 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
     });
 
     const loginBody = await loginRes.text();
-    console.log("Login response:", loginRes.status, loginBody.substring(0, 200));
 
-    // Merge login cookies
     const loginCookies = (loginRes.headers as any).getSetCookie?.() as string[] | undefined;
     if (loginCookies) {
       for (const c of loginCookies) {
@@ -98,6 +95,23 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
   }
 }
 
+async function fetchUdf(cookies: string, symbol: string, resolution: string, countback: number) {
+  const now = Math.floor(Date.now() / 1000);
+  const from = now - countback * 60;
+  const udfUrl = `${UNIC_BASE}/publicapi/tradingview/udf-history?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&countback=${countback}&site=unicbroker.com`;
+
+  const udfRes = await fetch(udfUrl, {
+    headers: {
+      Cookie: cookies,
+      Referer: `${UNIC_BASE}/traderoom`,
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      Accept: "application/json",
+    },
+  });
+
+  return udfRes;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -111,6 +125,7 @@ serve(async (req) => {
       countback = 300,
       broker_user,
       broker_pass,
+      session_cookies,
     } = body;
 
     if (!broker_user || !broker_pass) {
@@ -120,6 +135,26 @@ serve(async (req) => {
       );
     }
 
+    // Try client-provided session cookies first (skip login)
+    if (session_cookies) {
+      try {
+        const udfRes = await fetchUdf(session_cookies, symbol, resolution, countback);
+        if (udfRes.ok) {
+          const data = await udfRes.json();
+          if (data.s === "ok") {
+            return new Response(JSON.stringify({ ...data, session_cookies }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        } else {
+          await udfRes.text(); // consume body
+        }
+      } catch {
+        // Session expired, fall through to re-login
+      }
+    }
+
+    // Full login flow
     const cookies = await getUnicSession(broker_user, broker_pass);
     if (!cookies) {
       return new Response(
@@ -128,18 +163,7 @@ serve(async (req) => {
       );
     }
 
-    const now = Math.floor(Date.now() / 1000);
-    const from = now - countback * 60;
-    const udfUrl = `${UNIC_BASE}/publicapi/tradingview/udf-history?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&countback=${countback}&site=unicbroker.com`;
-
-    const udfRes = await fetch(udfUrl, {
-      headers: {
-        Cookie: cookies,
-        Referer: `${UNIC_BASE}/traderoom`,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        Accept: "application/json",
-      },
-    });
+    const udfRes = await fetchUdf(cookies, symbol, resolution, countback);
 
     if (!udfRes.ok) {
       if (udfRes.status === 401) sessionCache.delete(broker_user);
@@ -152,7 +176,8 @@ serve(async (req) => {
     }
 
     const data = await udfRes.json();
-    return new Response(JSON.stringify(data), {
+    // Return session_cookies so client can reuse them
+    return new Response(JSON.stringify({ ...data, session_cookies: cookies }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

@@ -23,32 +23,25 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const fetchUdfHistory = async (symbol: string, countback = 300): Promise<UdfHistoryResponse | null> => {
-  const session = alphaApi.getSession();
-  if (!session) return null;
-
-  // Get broker credentials from stored session
   const storedCreds = localStorage.getItem("broker_credentials");
   if (!storedCreds) return null;
 
   const { user, pass } = JSON.parse(storedCreds);
-  const now = Math.floor(Date.now() / 1000);
-  const from = now - countback * 60;
 
   try {
-    const params = new URLSearchParams({
-      symbol,
-      resolution: "1",
-      from: String(from),
-      to: String(now),
-      countback: String(countback),
-      broker_user: user,
-      broker_pass: pass,
-    });
-
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/unic-chart?${params}`, {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/unic-chart`, {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        symbol,
+        resolution: "1",
+        countback,
+        broker_user: user,
+        broker_pass: pass,
+      }),
     });
 
     if (!res.ok) return null;

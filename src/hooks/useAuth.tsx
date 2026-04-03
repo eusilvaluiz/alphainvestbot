@@ -84,11 +84,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .single();
 
       if (data?.broker_token) {
-        // Restore the API session from saved credentials
         const restored: UserSession = {
           accessToken: data.broker_token,
           wsToken: data.ws_token || "",
-          user: data.broker_user,
+          userId: 0,
+          login: data.broker_user,
+          name: data.broker_user,
           credit: data.credit || "0",
           creditCents: data.credit_cents || 0,
         };

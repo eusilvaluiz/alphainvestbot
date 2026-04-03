@@ -8,14 +8,17 @@ import ConfigPanel from "@/components/ConfigPanel";
 import HistorySidebar from "@/components/HistorySidebar";
 import LoginModal from "@/components/LoginModal";
 import { useAuth } from "@/hooks/useAuth";
+import { useTradingBot } from "@/hooks/useTradingBot";
 import { alphaApi, type Symbol as ApiSymbol } from "@/lib/api";
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("terminal");
   const [loginOpen, setLoginOpen] = useState(false);
   const { session, isLoggedIn } = useAuth();
   const [symbols, setSymbols] = useState<ApiSymbol[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<ApiSymbol | null>(null);
+
+  const bot = useTradingBot();
 
   useEffect(() => {
     alphaApi.getSymbols().then((syms) => {
@@ -26,12 +29,26 @@ const Index = () => {
   }, []);
 
   const handleStart = (config: any) => {
-    toast.info("Bot iniciado com sucesso!", {
+    if (!selectedSymbol) {
+      toast.error("Selecione um ativo primeiro");
+      return;
+    }
+    toast.info("Bot iniciado!", {
       description: `Modelo: ${config.model} | Entrada: R$ ${config.entryValue}`,
     });
+    bot.startBot(config, selectedSymbol);
   };
 
-  const balance = session ? session.creditCents / 100 : 0;
+  const handleStop = () => {
+    bot.stopBot();
+    toast.info("Bot parado");
+  };
+
+  const currentBalance = bot.isRunning
+    ? bot.balance
+    : session
+    ? session.creditCents / 100
+    : 0;
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -46,24 +63,32 @@ const Index = () => {
               selectedSymbol={selectedSymbol}
               symbols={symbols}
               onSymbolChange={setSelectedSymbol}
+              onPriceUpdate={bot.updateCurrentPrice}
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <ControlPanel
-                balance={balance}
-                status="Parado"
-                profitLoss={0}
-                winRate={0}
-                operations={0}
-                wins={0}
-                losses={0}
+                balance={currentBalance}
+                status={bot.status}
+                profitLoss={bot.profitLoss}
+                winRate={bot.winRate}
+                operations={bot.operations}
+                wins={bot.wins}
+                losses={bot.losses}
               />
-              <ConfigPanel isLoggedIn={isLoggedIn} balance={balance} onStart={handleStart} />
+              <ConfigPanel
+                isLoggedIn={isLoggedIn}
+                balance={currentBalance}
+                isRunning={bot.isRunning}
+                isProcessing={bot.isProcessing}
+                onStart={handleStart}
+                onStop={handleStop}
+              />
             </div>
           </div>
 
           <div className="w-72 border-l border-border p-4 hidden xl:block">
-            <HistorySidebar entries={[]} />
+            <HistorySidebar entries={bot.trades} />
           </div>
         </div>
       </div>

@@ -217,7 +217,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
           }
         }
       } catch {}
-    }, 2000);
+    }, 1000);
 
     return () => {
       clearInterval(interval);

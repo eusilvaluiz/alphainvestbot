@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from "react";
-import { createChart, type IChartApi, ColorType } from "lightweight-charts";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { createChart, type IChartApi, type ISeriesApi, ColorType } from "lightweight-charts";
 import { ChevronDown } from "lucide-react";
 import { alphaApi, type Symbol as ApiSymbol, type CandleData } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
+import type { TradeEntry } from "@/hooks/useTradingBot";
 
 interface CandlestickChartProps {
   selectedSymbol: ApiSymbol | null;
   symbols: ApiSymbol[];
   onSymbolChange: (symbol: ApiSymbol) => void;
   onPriceUpdate?: (price: number) => void;
+  activeTrades?: TradeEntry[];
 }
 
 interface UdfData {
@@ -21,11 +23,10 @@ interface UdfData {
   v?: number[];
 }
 
-async function fetchUnicCandles(symbol: string, countback = 300): Promise<{ time: number; open: number; high: number; low: number; close: number }[] | null> {
+async function fetchUnicCandles(symbol: string, countback = 300) {
   try {
     const stored = localStorage.getItem("broker_credentials");
     if (!stored) return null;
-
     const { user, pass } = JSON.parse(stored);
     if (!user || !pass) return null;
 
@@ -34,7 +35,6 @@ async function fetchUnicCandles(symbol: string, countback = 300): Promise<{ time
     });
 
     if (error || !data || data.s !== "ok" || !data.t?.length) return null;
-
     const udf = data as UdfData;
     return udf.t.map((t, i) => ({
       time: t,
@@ -48,13 +48,60 @@ async function fetchUnicCandles(symbol: string, countback = 300): Promise<{ time
   }
 }
 
-const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpdate }: CandlestickChartProps) => {
+const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpdate, activeTrades = [] }: CandlestickChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const entryLinesRef = useRef<Map<number, any>>(new Map());
   const [currentPrice, setCurrentPrice] = useState(0);
   const [stats, setStats] = useState({ open: 0, high: 0, low: 0 });
   const [showDropdown, setShowDropdown] = useState(false);
   const [dataSource, setDataSource] = useState<"unic" | "alpha">("unic");
+  const [candleCountdown, setCandleCountdown] = useState(60);
+
+  // Candle countdown timer (1-minute candles)
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = Math.floor(Date.now() / 1000);
+      const secondsIntoCandle = now % 60;
+      setCandleCountdown(60 - secondsIntoCandle);
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Draw/remove entry price lines when trades change
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+
+    const currentTradeIds = new Set(activeTrades.filter(t => t.status === "open").map(t => t.id));
+    
+    // Remove lines for closed trades
+    for (const [tradeId, priceLine] of entryLinesRef.current.entries()) {
+      if (!currentTradeIds.has(tradeId)) {
+        series.removePriceLine(priceLine);
+        entryLinesRef.current.delete(tradeId);
+      }
+    }
+
+    // Add lines for new open trades
+    for (const trade of activeTrades) {
+      if (trade.status === "open" && !entryLinesRef.current.has(trade.id)) {
+        const isUp = trade.direction === "up";
+        const priceLine = series.createPriceLine({
+          price: trade.entryPrice,
+          color: isUp ? "#28a745" : "#dc3545",
+          lineWidth: 2,
+          lineStyle: 0, // solid
+          axisLabelVisible: true,
+          title: `${isUp ? "▲" : "▼"} R$ ${trade.amountFormatted}`,
+        });
+        entryLinesRef.current.set(trade.id, priceLine);
+      }
+    }
+  }, [activeTrades]);
 
   useEffect(() => {
     if (!chartContainerRef.current || !selectedSymbol) return;
@@ -63,6 +110,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       chartRef.current.remove();
       chartRef.current = null;
     }
+    entryLinesRef.current.clear();
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -99,6 +147,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     });
 
     chartRef.current = chart;
+    seriesRef.current = series;
 
     const applyChartData = (chartData: { time: any; open: number; high: number; low: number; close: number }[]) => {
       if (chartData.length === 0) return;
@@ -114,7 +163,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
     };
 
-    // Load initial data - try Unic first, fallback to Alpha
     (async () => {
       const unicData = await fetchUnicCandles(selectedSymbol.code, 300);
       if (unicData && unicData.length > 0) {
@@ -141,7 +189,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     };
     window.addEventListener("resize", handleResize);
 
-    // Poll for updates every 3s
     const interval = setInterval(async () => {
       try {
         const unicData = await fetchUnicCandles(selectedSymbol.code, 5);
@@ -174,10 +221,18 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       window.removeEventListener("resize", handleResize);
       chart.remove();
       chartRef.current = null;
+      seriesRef.current = null;
+      entryLinesRef.current.clear();
     };
   }, [selectedSymbol?.code]);
 
   const payout = selectedSymbol ? `${Math.round((selectedSymbol.payout - 1) * 100)}%` : "85%";
+
+  const formatCountdown = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
 
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden">
@@ -216,11 +271,20 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${dataSource === "unic" ? "bg-chart-green" : "bg-yellow-500"} animate-pulse-glow`} />
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">
-            {dataSource === "unic" ? "Traderoom" : "Alpha"}
-          </span>
+        <div className="flex items-center gap-4">
+          {/* Candle countdown */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Candle:</span>
+            <span className={`text-sm font-mono font-bold ${candleCountdown <= 10 ? "text-chart-red" : "text-chart-green"}`}>
+              {formatCountdown(candleCountdown)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${dataSource === "unic" ? "bg-chart-green" : "bg-yellow-500"} animate-pulse-glow`} />
+            <span className="text-xs text-muted-foreground uppercase tracking-wider">
+              {dataSource === "unic" ? "Traderoom" : "Alpha"}
+            </span>
+          </div>
         </div>
       </div>
 

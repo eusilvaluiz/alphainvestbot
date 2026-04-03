@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { X } from "lucide-react";
@@ -87,6 +89,16 @@ const LoginModal = ({ open, onOpenChange }: LoginModalProps) => {
   return (
     <Dialog open={open} onOpenChange={resetAndClose}>
       <DialogContent className="bg-card border-border sm:max-w-md p-6 [&>button]:hidden">
+        <DialogTitle className="sr-only">
+          {mode === "broker" ? "Conectar corretora" : mode === "signup" ? "Criar conta" : "Entrar na conta"}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          {mode === "broker"
+            ? "Conecte sua conta da corretora para operar no Alpha Bot."
+            : mode === "signup"
+              ? "Crie sua conta com usuário, email e senha."
+              : "Faça login com seu usuário e senha."}
+        </DialogDescription>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">

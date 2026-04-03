@@ -177,9 +177,7 @@ const HistoryContent = ({ entries, onClearHistory }: { entries: TradeEntry[]; on
 );
 
 /** Floating button + Sheet drawer for mobile/tablet (below xl) */
-export const HistoryDrawer = ({ entries = [] }: HistorySidebarProps) => {
-  const openCount = entries.filter((e) => e.status === "open").length;
-
+export const HistoryDrawer = ({ entries = [], onClearHistory }: HistorySidebarProps) => {
   return (
     <div className="xl:hidden fixed bottom-4 right-4 z-50">
       <Sheet>
@@ -203,7 +201,7 @@ export const HistoryDrawer = ({ entries = [] }: HistorySidebarProps) => {
               Histórico
             </SheetTitle>
           </SheetHeader>
-          <HistoryContent entries={entries} />
+          <HistoryContent entries={entries} onClearHistory={onClearHistory} />
         </SheetContent>
       </Sheet>
     </div>
@@ -211,7 +209,7 @@ export const HistoryDrawer = ({ entries = [] }: HistorySidebarProps) => {
 };
 
 /** Desktop sidebar (xl+) */
-const HistorySidebar = ({ entries = [] }: HistorySidebarProps) => {
+const HistorySidebar = ({ entries = [], onClearHistory }: HistorySidebarProps) => {
   return (
     <div className="bg-card rounded-lg border border-border h-full flex flex-col">
       <div className="px-4 py-3 border-b border-border">
@@ -219,7 +217,7 @@ const HistorySidebar = ({ entries = [] }: HistorySidebarProps) => {
           Histórico
         </h2>
       </div>
-      <HistoryContent entries={entries} />
+      <HistoryContent entries={entries} onClearHistory={onClearHistory} />
     </div>
   );
 };

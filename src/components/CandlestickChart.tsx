@@ -288,25 +288,14 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
     };
 
-    const syncFromUnic = async (fitContent = false, source: "initial" | "poll" | "realtime" = "poll") => {
+    const syncFromUnic = async (fitContent = false) => {
       if (!isBrokerConnected) return false;
-
       if (syncInFlightRef.current) return false;
       syncInFlightRef.current = true;
 
       try {
-        const shouldForceFreshSession =
-          source === "initial" ||
-          Date.now() - lastFreshSessionSyncAtRef.current >= FORCE_FRESH_SESSION_EVERY_MS;
-
-        const unicData = await fetchUnicCandles(selectedSymbol.code, 300, {
-          forceFreshSession: shouldForceFreshSession,
-        });
+        const unicData = await fetchUnicCandles(selectedSymbol.code, 300);
         if (!unicData || unicData.length === 0 || isDisposed) return false;
-
-        if (shouldForceFreshSession) {
-          lastFreshSessionSyncAtRef.current = Date.now();
-        }
 
         setDataSource("unic");
         applyHistoricalData(unicData, fitContent);

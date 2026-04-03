@@ -1,6 +1,8 @@
-import { ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowUp, ArrowDown, History, X } from "lucide-react";
 import { type TradeEntry } from "@/hooks/useTradingBot";
 import { useState, useEffect } from "react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 
 interface HistorySidebarProps {
   entries: TradeEntry[];
@@ -115,6 +117,55 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
   );
 };
 
+const HistoryContent = ({ entries }: { entries: TradeEntry[] }) => (
+  <div className="flex-1 overflow-y-auto px-3 py-3">
+    {entries.length === 0 ? (
+      <p className="text-sm text-muted-foreground text-center mt-8">
+        Nenhuma operação ainda
+      </p>
+    ) : (
+      entries.map((entry) => (
+        <TradeCard key={entry.id} entry={entry} />
+      ))
+    )}
+  </div>
+);
+
+/** Floating button + Sheet drawer for mobile/tablet (below xl) */
+export const HistoryDrawer = ({ entries = [] }: HistorySidebarProps) => {
+  const openCount = entries.filter((e) => e.status === "open").length;
+
+  return (
+    <div className="xl:hidden fixed bottom-4 right-4 z-50">
+      <Sheet>
+        <SheetTrigger asChild>
+          <Button
+            size="icon"
+            variant="trading"
+            className="h-12 w-12 rounded-full shadow-lg relative"
+          >
+            <History size={20} />
+            {entries.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                {entries.length}
+              </span>
+            )}
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="right" className="w-80 sm:w-96 bg-card border-border p-0">
+          <SheetHeader className="px-4 py-3 border-b border-border">
+            <SheetTitle className="text-xs font-heading font-semibold text-muted-foreground tracking-wider uppercase">
+              Histórico
+            </SheetTitle>
+          </SheetHeader>
+          <HistoryContent entries={entries} />
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+};
+
+/** Desktop sidebar (xl+) */
 const HistorySidebar = ({ entries = [] }: HistorySidebarProps) => {
   return (
     <div className="bg-card rounded-lg border border-border h-full flex flex-col">
@@ -123,18 +174,7 @@ const HistorySidebar = ({ entries = [] }: HistorySidebarProps) => {
           Histórico
         </h2>
       </div>
-
-      <div className="flex-1 overflow-y-auto px-3 py-3">
-        {entries.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center mt-8">
-            Nenhuma operação ainda
-          </p>
-        ) : (
-          entries.map((entry) => (
-            <TradeCard key={entry.id} entry={entry} />
-          ))
-        )}
-      </div>
+      <HistoryContent entries={entries} />
     </div>
   );
 };

@@ -5,7 +5,7 @@ import Header from "@/components/Header";
 import CandlestickChart from "@/components/CandlestickChart";
 import ControlPanel from "@/components/ControlPanel";
 import ConfigPanel from "@/components/ConfigPanel";
-import HistorySidebar from "@/components/HistorySidebar";
+import HistorySidebar, { HistoryDrawer } from "@/components/HistorySidebar";
 import LoginModal from "@/components/LoginModal";
 import { useAuth } from "@/hooks/useAuth";
 import { useTradingBot } from "@/hooks/useTradingBot";
@@ -93,6 +93,7 @@ const Index = () => {
         </div>
       </div>
 
+      <HistoryDrawer entries={bot.trades} />
       <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
     </div>
   );

@@ -189,6 +189,11 @@ class AlphaApi {
     return this.session;
   }
 
+  restoreSession(session: UserSession): void {
+    this.session = session;
+    localStorage.setItem("alpha_session", JSON.stringify(this.session));
+  }
+
   logout(): void {
     this.session = null;
     localStorage.removeItem("alpha_session");

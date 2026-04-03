@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { Menu, LogOut, User, Settings } from "lucide-react";
+import { Menu, LogOut, User, Settings, Link } from "lucide-react";
 
 interface HeaderProps {
   onLoginClick: () => void;
 }
 
 const Header = ({ onLoginClick }: HeaderProps) => {
-  const { session, isLoggedIn, logout } = useAuth();
+  const { user, isLoggedIn, signOut, isBrokerConnected, brokerSession } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const displayName = brokerSession?.login || user?.email?.split("@")[0] || "";
 
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-border">
@@ -24,7 +26,10 @@ const Header = ({ onLoginClick }: HeaderProps) => {
               onClick={() => setMenuOpen(!menuOpen)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-secondary transition-colors"
             >
-              <span className="text-sm text-foreground">{session?.login}</span>
+              <span className="text-sm text-foreground">{displayName}</span>
+              {isBrokerConnected && (
+                <span className="w-2 h-2 rounded-full bg-chart-green" title="Corretora conectada" />
+              )}
               <Menu size={16} className="text-muted-foreground" />
             </button>
             {menuOpen && (
@@ -36,6 +41,15 @@ const Header = ({ onLoginClick }: HeaderProps) => {
                   <User size={14} className="text-muted-foreground" />
                   Perfil
                 </button>
+                {!isBrokerConnected && (
+                  <button
+                    onClick={() => { setMenuOpen(false); onLoginClick(); }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-primary hover:bg-secondary transition-colors"
+                  >
+                    <Link size={14} />
+                    Conectar Corretora
+                  </button>
+                )}
                 <button
                   onClick={() => { setMenuOpen(false); }}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-secondary transition-colors"
@@ -45,7 +59,7 @@ const Header = ({ onLoginClick }: HeaderProps) => {
                 </button>
                 <div className="border-t border-border" />
                 <button
-                  onClick={() => { logout(); setMenuOpen(false); }}
+                  onClick={() => { signOut(); setMenuOpen(false); }}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-secondary transition-colors"
                 >
                   <LogOut size={14} />

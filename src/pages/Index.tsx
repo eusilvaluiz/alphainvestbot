@@ -14,7 +14,7 @@ import { alphaApi, type Symbol as ApiSymbol } from "@/lib/api";
 const Index = () => {
   const [activeTab, setActiveTab] = useState("terminal");
   const [loginOpen, setLoginOpen] = useState(false);
-  const { session, isLoggedIn } = useAuth();
+  const { isLoggedIn, isBrokerConnected, brokerSession } = useAuth();
   const [symbols, setSymbols] = useState<ApiSymbol[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<ApiSymbol | null>(null);
 
@@ -46,8 +46,8 @@ const Index = () => {
 
   const currentBalance = bot.isRunning
     ? bot.balance
-    : session
-    ? session.creditCents / 100
+    : brokerSession
+    ? brokerSession.creditCents / 100
     : 0;
 
   return (
@@ -77,7 +77,7 @@ const Index = () => {
                 losses={bot.losses}
               />
               <ConfigPanel
-                isLoggedIn={isLoggedIn}
+                isLoggedIn={isBrokerConnected}
                 balance={currentBalance}
                 isRunning={bot.isRunning}
                 isProcessing={bot.isProcessing}

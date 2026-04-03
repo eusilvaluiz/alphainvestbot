@@ -7,17 +7,14 @@ interface SidebarNavProps {
 }
 
 const SidebarNav = ({ activeTab, onTabChange }: SidebarNavProps) => {
-  const { session, isLoggedIn, logout } = useAuth();
+  const { user, isLoggedIn, signOut, brokerSession } = useAuth();
 
   const items = [
     { id: "terminal", icon: Terminal },
   ];
 
-  const initials = session?.name
-    ? session.name.slice(0, 2).toUpperCase()
-    : session?.login
-    ? session.login.slice(0, 2).toUpperCase()
-    : "";
+  const displayName = brokerSession?.login || user?.email || "";
+  const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
     <aside className="fixed left-0 top-0 h-full w-14 flex flex-col items-center py-4 bg-background border-r border-border z-50">
@@ -52,7 +49,7 @@ const SidebarNav = ({ activeTab, onTabChange }: SidebarNavProps) => {
               <span className="text-xs font-semibold text-foreground">{initials}</span>
             </div>
             <button
-              onClick={logout}
+              onClick={signOut}
               className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
               title="Sair"
             >

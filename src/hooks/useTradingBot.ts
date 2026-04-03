@@ -144,7 +144,7 @@ export const useTradingBot = () => {
       saveState({
         running: false,
         config: null,
-        symbolCode: null,
+        symbolCode: botRef.current.symbol?.code || null,
         trades: t,
         profitLoss: botRef.current.profitLoss,
         wins: 0,

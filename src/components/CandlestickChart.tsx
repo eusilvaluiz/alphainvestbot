@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createChart, type IChartApi, type ISeriesApi, ColorType } from "lightweight-charts";
 import { ChevronDown } from "lucide-react";
 import { alphaApi, type Symbol as ApiSymbol, type CandleData } from "@/lib/api";
@@ -22,6 +22,14 @@ interface UdfData {
   c: number[];
   v?: number[];
 }
+
+type ChartCandle = {
+  time: any;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
 
 async function fetchUnicCandles(symbol: string, countback = 300) {
   try {
@@ -53,13 +61,13 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const entryLinesRef = useRef<Map<number, any>>(new Map());
+  const chartDataRef = useRef<ChartCandle[]>([]);
   const [currentPrice, setCurrentPrice] = useState(0);
   const [stats, setStats] = useState({ open: 0, high: 0, low: 0 });
   const [showDropdown, setShowDropdown] = useState(false);
   const [dataSource, setDataSource] = useState<"unic" | "alpha">("unic");
   const [candleCountdown, setCandleCountdown] = useState(60);
 
-  // Candle countdown timer (1-minute candles)
   useEffect(() => {
     const updateCountdown = () => {
       const now = Math.floor(Date.now() / 1000);
@@ -71,14 +79,12 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     return () => clearInterval(timer);
   }, []);
 
-  // Draw/remove entry price lines when trades change
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
 
-    const currentTradeIds = new Set(activeTrades.filter(t => t.status === "open").map(t => t.id));
-    
-    // Remove lines for closed trades
+    const currentTradeIds = new Set(activeTrades.filter((t) => t.status === "open").map((t) => t.id));
+
     for (const [tradeId, priceLine] of entryLinesRef.current.entries()) {
       if (!currentTradeIds.has(tradeId)) {
         series.removePriceLine(priceLine);
@@ -86,7 +92,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       }
     }
 
-    // Add lines for new open trades
     for (const trade of activeTrades) {
       if (trade.status === "open" && !entryLinesRef.current.has(trade.id)) {
         const isUp = trade.direction === "up";
@@ -94,7 +99,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
           price: trade.entryPrice,
           color: isUp ? "#28a745" : "#dc3545",
           lineWidth: 2,
-          lineStyle: 0, // solid
+          lineStyle: 0,
           axisLabelVisible: true,
           title: `${isUp ? "▲" : "▼"} R$ ${trade.amountFormatted}`,
         });
@@ -110,6 +115,8 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       chartRef.current.remove();
       chartRef.current = null;
     }
+
+    chartDataRef.current = [];
     entryLinesRef.current.clear();
 
     const chart = createChart(chartContainerRef.current, {
@@ -149,10 +156,15 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     chartRef.current = chart;
     seriesRef.current = series;
 
-    const applyChartData = (chartData: { time: any; open: number; high: number; low: number; close: number }[]) => {
+    const applyChartData = (chartData: ChartCandle[], fitContent = false) => {
       if (chartData.length === 0) return;
+
+      chartDataRef.current = chartData;
       series.setData(chartData as any);
-      chart.timeScale().fitContent();
+      if (fitContent) {
+        chart.timeScale().fitContent();
+      }
+
       const last = chartData[chartData.length - 1];
       setCurrentPrice(last.close);
       onPriceUpdate?.(last.close);
@@ -163,24 +175,27 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
     };
 
-    (async () => {
+    const syncChartData = async (fitContent = false) => {
       const unicData = await fetchUnicCandles(selectedSymbol.code, 300);
       if (unicData && unicData.length > 0) {
         setDataSource("unic");
-        applyChartData(unicData);
-      } else {
-        setDataSource("alpha");
-        const candles = await alphaApi.getHistoricalData(selectedSymbol.code);
-        const chartData = candles.map((c: CandleData) => ({
-          time: c.open_time as any,
-          open: parseFloat(c.open),
-          high: parseFloat(c.higher),
-          low: parseFloat(c.lower),
-          close: parseFloat(c.close),
-        }));
-        applyChartData(chartData);
+        applyChartData(unicData, fitContent);
+        return;
       }
-    })();
+
+      setDataSource("alpha");
+      const candles = await alphaApi.getHistoricalData(selectedSymbol.code);
+      const chartData = candles.map((c: CandleData) => ({
+        time: c.open_time as any,
+        open: parseFloat(c.open),
+        high: parseFloat(c.higher),
+        low: parseFloat(c.lower),
+        close: parseFloat(c.close),
+      }));
+      applyChartData(chartData, fitContent);
+    };
+
+    void syncChartData(true);
 
     const handleResize = () => {
       if (chartContainerRef.current) {
@@ -189,34 +204,8 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     };
     window.addEventListener("resize", handleResize);
 
-    const interval = setInterval(async () => {
-      try {
-        const unicData = await fetchUnicCandles(selectedSymbol.code, 10);
-        if (unicData && unicData.length > 0) {
-          // Update ALL returned candles so manipulations are reflected
-          for (const candle of unicData) {
-            series.update(candle as any);
-          }
-          const last = unicData[unicData.length - 1];
-          setCurrentPrice(last.close);
-          onPriceUpdate?.(last.close);
-        } else {
-          const candles = await alphaApi.getHistoricalData(selectedSymbol.code);
-          if (candles.length > 0) {
-            const last = candles[candles.length - 1];
-            const newCandle = {
-              time: last.open_time as any,
-              open: parseFloat(last.open),
-              high: parseFloat(last.higher),
-              low: parseFloat(last.lower),
-              close: parseFloat(last.close),
-            };
-            series.update(newCandle);
-            setCurrentPrice(newCandle.close);
-            onPriceUpdate?.(newCandle.close);
-          }
-        }
-      } catch {}
+    const interval = setInterval(() => {
+      void syncChartData(false);
     }, 1000);
 
     return () => {
@@ -225,9 +214,10 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      chartDataRef.current = [];
       entryLinesRef.current.clear();
     };
-  }, [selectedSymbol?.code]);
+  }, [selectedSymbol?.code, onPriceUpdate]);
 
   const payout = selectedSymbol ? `${Math.round((selectedSymbol.payout - 1) * 100)}%` : "85%";
 
@@ -275,7 +265,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
           )}
         </div>
         <div className="flex items-center gap-4">
-          {/* Candle countdown */}
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground">Candle:</span>
             <span className={`text-sm font-mono font-bold ${candleCountdown <= 10 ? "text-chart-red" : "text-chart-green"}`}>

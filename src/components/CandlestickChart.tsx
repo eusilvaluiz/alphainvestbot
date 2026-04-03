@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { createChart, type IChartApi, type ISeriesApi, ColorType } from "lightweight-charts";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
 import { alphaApi, type Symbol as ApiSymbol, type CandleData } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import type { TradeEntry } from "@/hooks/useTradingBot";

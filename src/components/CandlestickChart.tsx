@@ -23,13 +23,8 @@ interface UdfData {
   v?: number[];
 }
 
-type ChartCandle = {
-  time: any;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-};
+// Client-side session cookie cache to avoid re-login on every poll
+let cachedSessionCookies: string | null = null;
 
 async function fetchUnicCandles(symbol: string, countback = 300) {
   try {
@@ -39,10 +34,23 @@ async function fetchUnicCandles(symbol: string, countback = 300) {
     if (!user || !pass) return null;
 
     const { data, error } = await supabase.functions.invoke("unic-chart", {
-      body: { symbol, resolution: "1", countback, broker_user: user, broker_pass: pass },
+      body: {
+        symbol,
+        resolution: "1",
+        countback,
+        broker_user: user,
+        broker_pass: pass,
+        session_cookies: cachedSessionCookies,
+      },
     });
 
     if (error || !data || data.s !== "ok" || !data.t?.length) return null;
+
+    // Cache session cookies returned by edge function
+    if (data.session_cookies) {
+      cachedSessionCookies = data.session_cookies;
+    }
+
     const udf = data as UdfData;
     return udf.t.map((t, i) => ({
       time: t,

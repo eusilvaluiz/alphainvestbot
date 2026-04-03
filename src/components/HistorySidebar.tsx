@@ -49,6 +49,12 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
           ? "border-chart-green/30 bg-chart-green/5"
           : isLoss
           ? "border-chart-red/30 bg-chart-red/5"
+          : isOpen
+          ? liveWinning
+            ? "border-chart-green/20 bg-chart-green/5"
+            : liveTied
+            ? "border-border bg-secondary"
+            : "border-chart-red/20 bg-chart-red/5"
           : "border-border bg-secondary"
       }`}
     >

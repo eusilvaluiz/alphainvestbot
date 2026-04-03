@@ -307,7 +307,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
     // Load initial historical data
     const loadInitialData = async () => {
-      const loadedFromUnic = await syncFromUnic(true, "initial");
+      const loadedFromUnic = await syncFromUnic(true);
       if (loadedFromUnic) return;
 
       setDataSource("alpha");

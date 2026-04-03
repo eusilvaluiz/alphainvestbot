@@ -6,6 +6,8 @@ interface ControlPanelProps {
   operations: number;
   wins: number;
   losses: number;
+  martingaleLevel?: number;
+  isMartingale?: boolean;
 }
 
 const ControlPanel = ({
@@ -16,6 +18,8 @@ const ControlPanel = ({
   operations = 0,
   wins = 0,
   losses = 0,
+  martingaleLevel = 0,
+  isMartingale = false,
 }: ControlPanelProps) => {
   return (
     <div className="bg-card rounded-lg border border-border p-4">
@@ -32,10 +36,17 @@ const ControlPanel = ({
         </div>
         <div className="bg-secondary rounded-lg p-3">
           <span className="text-xs text-muted-foreground">Status</span>
-          <p className="text-lg font-semibold text-foreground mt-1 flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${status === "Ativo" ? "bg-chart-green animate-pulse" : "bg-muted-foreground"}`} />
-            {status}
-          </p>
+          <div className="mt-1">
+            <p className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${status !== "Parado" ? "bg-chart-green animate-pulse" : "bg-muted-foreground"}`} />
+              {status}
+            </p>
+            {isMartingale && martingaleLevel > 0 && (
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 mt-1 inline-block">
+                M L{martingaleLevel}
+              </span>
+            )}
+          </div>
         </div>
         <div className="bg-secondary rounded-lg p-3">
           <span className="text-xs text-muted-foreground">Lucro / Perda</span>

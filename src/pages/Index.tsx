@@ -75,6 +75,8 @@ const Index = () => {
                 operations={bot.operations}
                 wins={bot.wins}
                 losses={bot.losses}
+                martingaleLevel={bot.currentMartingaleLevel}
+                isMartingale={bot.isMartingale}
               />
               <ConfigPanel
                 isLoggedIn={isBrokerConnected}

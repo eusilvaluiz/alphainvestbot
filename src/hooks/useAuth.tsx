@@ -161,6 +161,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       await authenticateWithBroker(username, password);
+      // Store broker credentials for chart UDF access
+      localStorage.setItem("broker_credentials", JSON.stringify({ user: username, pass: password }));
     } catch (e: any) {
       const message = e?.message || "Erro ao fazer login";
       setError(message);
@@ -177,6 +179,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     setBrokerSession(null);
     alphaApi.logout();
+    localStorage.removeItem("broker_credentials");
   };
 
   const connectBroker = async (brokerUser: string, brokerPass: string) => {

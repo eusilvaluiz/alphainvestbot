@@ -109,6 +109,7 @@ const Index = () => {
                 isProcessing={bot.isProcessing}
                 onStart={handleStart}
                 onStop={handleStop}
+                onModelChange={setSelectedModel}
               />
             </div>
           </div>

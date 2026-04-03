@@ -32,6 +32,7 @@ const ConfigPanel = ({
   isProcessing,
   onStart,
   onStop,
+  onModelChange,
 }: ConfigPanelProps) => {
   const { user } = useAuth();
   const [entryValue, setEntryValue] = useState("10");

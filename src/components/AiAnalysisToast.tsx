@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Brain, X, Sparkles } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import type { Symbol as ApiSymbol } from "@/lib/api";
 
 interface AiAnalysisToastProps {

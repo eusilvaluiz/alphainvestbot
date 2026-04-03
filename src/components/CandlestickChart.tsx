@@ -36,11 +36,7 @@ type ChartCandle = {
 // Client-side session cookie cache
 let cachedSessionCookies: string | null = null;
 
-async function fetchUnicCandles(
-  symbol: string,
-  countback = 300,
-  options?: { forceFreshSession?: boolean }
-) {
+async function fetchUnicCandles(symbol: string, countback = 300) {
   try {
     const stored = localStorage.getItem("broker_credentials");
     if (!stored) return null;
@@ -53,10 +49,10 @@ async function fetchUnicCandles(
       countback,
       broker_user: user,
       broker_pass: pass,
-      force_refresh_session: !!options?.forceFreshSession,
     };
 
-    if (!options?.forceFreshSession && cachedSessionCookies) {
+    // Send cached cookies so edge function can skip login
+    if (cachedSessionCookies) {
       body.session_cookies = cachedSessionCookies;
     }
 
@@ -65,10 +61,12 @@ async function fetchUnicCandles(
     });
 
     if (error || !data || data.s !== "ok" || !data.t?.length) {
+      // If failed, clear cached cookies so next call forces fresh login
       cachedSessionCookies = null;
       return null;
     }
 
+    // Cache the session cookies returned by edge function
     if (data.session_cookies) {
       cachedSessionCookies = data.session_cookies;
     }
@@ -105,9 +103,8 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | null> {
 }
 
 const BRAND_URL = "unicbroker.com";
-const HISTORICAL_SYNC_INTERVAL_MS = 1000;
+const HISTORICAL_SYNC_INTERVAL_MS = 5000;
 const REALTIME_SYNC_DEBOUNCE_MS = 700;
-const FORCE_FRESH_SESSION_EVERY_MS = 3000;
 
 const parseNumber = (value: unknown) => {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -162,7 +159,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
   const ablyClientRef = useRef<Ably.Realtime | null>(null);
   const syncInFlightRef = useRef(false);
   const lastRealtimeSyncAtRef = useRef(0);
-  const lastFreshSessionSyncAtRef = useRef(0);
+  
   const [currentPrice, setCurrentPrice] = useState(0);
   const [stats, setStats] = useState({ open: 0, high: 0, low: 0 });
   const [showDropdown, setShowDropdown] = useState(false);
@@ -232,7 +229,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     entryLinesRef.current.clear();
     syncInFlightRef.current = false;
     lastRealtimeSyncAtRef.current = 0;
-    lastFreshSessionSyncAtRef.current = 0;
+    
     setRealtimeStatus("disconnected");
 
     const chart = createChart(chartContainerRef.current, {
@@ -291,25 +288,14 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
     };
 
-    const syncFromUnic = async (fitContent = false, source: "initial" | "poll" | "realtime" = "poll") => {
+    const syncFromUnic = async (fitContent = false) => {
       if (!isBrokerConnected) return false;
-
       if (syncInFlightRef.current) return false;
       syncInFlightRef.current = true;
 
       try {
-        const shouldForceFreshSession =
-          source === "initial" ||
-          Date.now() - lastFreshSessionSyncAtRef.current >= FORCE_FRESH_SESSION_EVERY_MS;
-
-        const unicData = await fetchUnicCandles(selectedSymbol.code, 300, {
-          forceFreshSession: shouldForceFreshSession,
-        });
+        const unicData = await fetchUnicCandles(selectedSymbol.code, 300);
         if (!unicData || unicData.length === 0 || isDisposed) return false;
-
-        if (shouldForceFreshSession) {
-          lastFreshSessionSyncAtRef.current = Date.now();
-        }
 
         setDataSource("unic");
         applyHistoricalData(unicData, fitContent);
@@ -321,7 +307,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
     // Load initial historical data
     const loadInitialData = async () => {
-      const loadedFromUnic = await syncFromUnic(true, "initial");
+      const loadedFromUnic = await syncFromUnic(true);
       if (loadedFromUnic) return;
 
       setDataSource("alpha");
@@ -345,7 +331,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       if (!isBrokerConnected) return;
 
       syncInterval = window.setInterval(() => {
-        void syncFromUnic(false, "poll");
+        void syncFromUnic();
       }, HISTORICAL_SYNC_INTERVAL_MS);
     };
 
@@ -404,7 +390,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
           }
 
           lastRealtimeSyncAtRef.current = now;
-          void syncFromUnic(false, "realtime");
+          void syncFromUnic();
         }
       });
 

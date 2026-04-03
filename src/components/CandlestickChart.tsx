@@ -1,16 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createChart, type IChartApi, ColorType } from "lightweight-charts";
 import { ChevronDown } from "lucide-react";
-import { alphaApi, type Symbol as ApiSymbol } from "@/lib/api";
-
-interface UdfHistoryResponse {
-  s: string;
-  t: number[];
-  o: number[];
-  h: number[];
-  l: number[];
-  c: number[];
-}
+import { alphaApi, type Symbol as ApiSymbol, type CandleData } from "@/lib/api";
 
 interface CandlestickChartProps {
   selectedSymbol: ApiSymbol | null;
@@ -19,74 +10,12 @@ interface CandlestickChartProps {
   onPriceUpdate?: (price: number) => void;
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-const fetchUdfHistory = async (symbol: string, countback = 300): Promise<UdfHistoryResponse | null> => {
-  const storedCreds = localStorage.getItem("broker_credentials");
-  if (!storedCreds) return null;
-
-  const { user, pass } = JSON.parse(storedCreds);
-
-  try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/unic-chart`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        symbol,
-        resolution: "1",
-        countback,
-        broker_user: user,
-        broker_pass: pass,
-      }),
-    });
-
-    if (!res.ok) return null;
-    const data: UdfHistoryResponse = await res.json();
-    if (data.s !== "ok" || !data.t?.length) return null;
-    return data;
-  } catch {
-    return null;
-  }
-};
-
-// Fallback: use alpha API historical data
-const fetchAlphaHistory = async (symbol: string) => {
-  try {
-    const candles = await alphaApi.getHistoricalData(symbol);
-    if (!candles.length) return null;
-    return candles.map((c) => ({
-      time: c.open_time as any,
-      open: parseFloat(c.open),
-      high: parseFloat(c.higher),
-      low: parseFloat(c.lower),
-      close: parseFloat(c.close),
-    }));
-  } catch {
-    return null;
-  }
-};
-
-const udfToChartData = (udf: UdfHistoryResponse) => {
-  return udf.t.map((time, i) => ({
-    time: time as any,
-    open: udf.o[i],
-    high: udf.h[i],
-    low: udf.l[i],
-    close: udf.c[i],
-  }));
-};
-
 const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpdate }: CandlestickChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [currentPrice, setCurrentPrice] = useState(0);
   const [stats, setStats] = useState({ open: 0, high: 0, low: 0 });
   const [showDropdown, setShowDropdown] = useState(false);
-  const [dataSource, setDataSource] = useState<"unic" | "alpha">("alpha");
 
   useEffect(() => {
     if (!chartContainerRef.current || !selectedSymbol) return;
@@ -132,45 +61,29 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
     chartRef.current = chart;
 
-    const loadData = async () => {
-      // Try Unic UDF first (has manipulated candles)
-      const udf = await fetchUdfHistory(selectedSymbol.code);
-      if (udf) {
-        const chartData = udfToChartData(udf);
-        series.setData(chartData);
-        chart.timeScale().fitContent();
-        setDataSource("unic");
+    alphaApi.getHistoricalData(selectedSymbol.code).then((candles: CandleData[]) => {
+      if (candles.length === 0) return;
 
-        const last = chartData[chartData.length - 1];
-        setCurrentPrice(last.close);
-        onPriceUpdate?.(last.close);
-        setStats({
-          open: chartData[0].open,
-          high: Math.max(...chartData.map((d) => d.high)),
-          low: Math.min(...chartData.map((d) => d.low)),
-        });
-        return;
-      }
+      const chartData = candles.map((c) => ({
+        time: c.open_time as any,
+        open: parseFloat(c.open),
+        high: parseFloat(c.higher),
+        low: parseFloat(c.lower),
+        close: parseFloat(c.close),
+      }));
 
-      // Fallback to alpha API
-      const alphaData = await fetchAlphaHistory(selectedSymbol.code);
-      if (alphaData && alphaData.length > 0) {
-        series.setData(alphaData);
-        chart.timeScale().fitContent();
-        setDataSource("alpha");
+      series.setData(chartData);
+      chart.timeScale().fitContent();
 
-        const last = alphaData[alphaData.length - 1];
-        setCurrentPrice(last.close);
-        onPriceUpdate?.(last.close);
-        setStats({
-          open: alphaData[0].open,
-          high: Math.max(...alphaData.map((d) => d.high)),
-          low: Math.min(...alphaData.map((d) => d.low)),
-        });
-      }
-    };
-
-    loadData();
+      const last = chartData[chartData.length - 1];
+      setCurrentPrice(last.close);
+      onPriceUpdate?.(last.close);
+      setStats({
+        open: chartData[0].open,
+        high: Math.max(...chartData.map((d) => d.high)),
+        low: Math.min(...chartData.map((d) => d.low)),
+      });
+    });
 
     const handleResize = () => {
       if (chartContainerRef.current) {
@@ -182,39 +95,22 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     // Poll for updates
     const interval = setInterval(async () => {
       try {
-        if (dataSource === "unic") {
-          const udf = await fetchUdfHistory(selectedSymbol.code, 5);
-          if (udf && udf.t.length > 0) {
-            const lastIdx = udf.t.length - 1;
-            const newCandle = {
-              time: udf.t[lastIdx] as any,
-              open: udf.o[lastIdx],
-              high: udf.h[lastIdx],
-              low: udf.l[lastIdx],
-              close: udf.c[lastIdx],
-            };
-            series.update(newCandle);
-            setCurrentPrice(newCandle.close);
-            onPriceUpdate?.(newCandle.close);
-          }
-        } else {
-          const candles = await alphaApi.getHistoricalData(selectedSymbol.code);
-          if (candles.length > 0) {
-            const last = candles[candles.length - 1];
-            const newCandle = {
-              time: last.open_time as any,
-              open: parseFloat(last.open),
-              high: parseFloat(last.higher),
-              low: parseFloat(last.lower),
-              close: parseFloat(last.close),
-            };
-            series.update(newCandle);
-            setCurrentPrice(newCandle.close);
-            onPriceUpdate?.(newCandle.close);
-          }
+        const candles = await alphaApi.getHistoricalData(selectedSymbol.code);
+        if (candles.length > 0) {
+          const last = candles[candles.length - 1];
+          const newCandle = {
+            time: last.open_time as any,
+            open: parseFloat(last.open),
+            high: parseFloat(last.higher),
+            low: parseFloat(last.lower),
+            close: parseFloat(last.close),
+          };
+          series.update(newCandle);
+          setCurrentPrice(newCandle.close);
+          onPriceUpdate?.(newCandle.close);
         }
       } catch {}
-    }, 3000);
+    }, 5000);
 
     return () => {
       clearInterval(interval);
@@ -264,10 +160,8 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${dataSource === "unic" ? "bg-chart-green" : "bg-yellow-500"} animate-pulse-glow`} />
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">
-            {dataSource === "unic" ? "Traderoom" : "Ao Vivo"}
-          </span>
+          <span className="w-2 h-2 rounded-full bg-chart-green animate-pulse-glow" />
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Ao Vivo</span>
         </div>
       </div>
 

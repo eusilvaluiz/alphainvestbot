@@ -459,19 +459,15 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
             </span>
           </div>
           {showDropdown && (
-            <div className="absolute top-full left-0 mt-2 bg-card border border-border rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto w-56">
-              {symbols.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => { onSymbolChange(s); setShowDropdown(false); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
-                >
-                  <img src={s.img} alt={s.name} className="w-5 h-5" />
-                  <span>{s.name}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{s.code}</span>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)} />
+              <SymbolPickerModal
+                symbols={symbols}
+                selectedSymbol={selectedSymbol}
+                onSelect={(s) => { onSymbolChange(s); setShowDropdown(false); }}
+                onClose={() => setShowDropdown(false)}
+              />
+            </>
           )}
         </div>
         <div className="flex items-center gap-4">

@@ -54,14 +54,14 @@ Gere UMA análise curta sobre o momento atual deste ativo.`;
           Authorization: `Bearer ${LOVABLE_API_KEY}`,
           "Content-Type": "application/json",
         },
+        const isOpenAI = aiModel.startsWith("openai/");
         body: JSON.stringify({
           model: aiModel,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userContext },
           ],
-          ...(aiModel.startsWith("openai/") ? { max_completion_tokens: 100 } : { max_tokens: 100 }),
-          temperature: 0.9,
+          ...(isOpenAI ? { max_completion_tokens: 100 } : { max_tokens: 100, temperature: 0.9 }),
         }),
       }
     );

@@ -75,7 +75,7 @@ const Index = () => {
               selectedSymbol={selectedSymbol}
               symbols={symbols}
               onSymbolChange={setSelectedSymbol}
-              onPriceUpdate={bot.updateCurrentPrice}
+              onPriceUpdate={handlePriceUpdate}
               activeTrades={bot.trades}
             />
 

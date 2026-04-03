@@ -1,10 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Save } from "lucide-react";
-import { toast } from "sonner";
 
 type AiModel = "grok" | "claude" | "gpt";
 
@@ -39,8 +37,8 @@ const ConfigPanel = ({
   const [stopWin, setStopWin] = useState("500");
   const [stopLoss, setStopLoss] = useState("100");
   const [selectedModel, setSelectedModel] = useState<AiModel>("grok");
-  const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load saved config when user logs in
   useEffect(() => {
@@ -79,17 +77,13 @@ const ConfigPanel = ({
     }
   }, [isLoggedIn, balance, isRunning, loaded]);
 
-  const models: { id: AiModel; label: string }[] = [
-    { id: "grok", label: "Grok 4.1" },
-    { id: "claude", label: "Claude 4.5" },
-    { id: "gpt", label: "GPT 5.1" },
-  ];
+  // Auto-save config with debounce
+  const autoSave = useCallback(() => {
+    if (!user?.id || !loaded || isRunning) return;
 
-  const handleSave = async () => {
-    if (!user?.id) return;
-    setSaving(true);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
 
-    try {
+    saveTimer.current = setTimeout(async () => {
       const payload = {
         user_id: user.id,
         entry_value: parseFloat(entryValue) || 10,
@@ -101,7 +95,6 @@ const ConfigPanel = ({
         name: "Padrão",
       };
 
-      // Check if config already exists
       const { data: existing } = await supabase
         .from("bot_configs")
         .select("id")
@@ -111,25 +104,27 @@ const ConfigPanel = ({
         .maybeSingle();
 
       if (existing?.id) {
-        const { error } = await supabase
-          .from("bot_configs")
-          .update(payload)
-          .eq("id", existing.id);
-        if (error) throw error;
+        await supabase.from("bot_configs").update(payload).eq("id", existing.id);
       } else {
-        const { error } = await supabase
-          .from("bot_configs")
-          .insert(payload);
-        if (error) throw error;
+        await supabase.from("bot_configs").insert(payload);
       }
+    }, 1500);
+  }, [user?.id, entryValue, position, stopWin, stopLoss, selectedModel, loaded, isRunning]);
 
-      toast.success("Configuração salva!");
-    } catch (e: any) {
-      toast.error(e?.message || "Erro ao salvar configuração");
-    } finally {
-      setSaving(false);
+  useEffect(() => {
+    if (loaded && user?.id && !isRunning) {
+      autoSave();
     }
-  };
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [entryValue, position, stopWin, stopLoss, selectedModel, autoSave]);
+
+  const models: { id: AiModel; label: string }[] = [
+    { id: "grok", label: "Grok 4.1" },
+    { id: "claude", label: "Claude 4.5" },
+    { id: "gpt", label: "GPT 5.1" },
+  ];
 
   const handleStart = () => {
     onStart({
@@ -143,23 +138,9 @@ const ConfigPanel = ({
 
   return (
     <div className="bg-card rounded-lg border border-border p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xs font-heading font-semibold text-muted-foreground tracking-wider uppercase">
-          Configuração
-        </h2>
-        {isLoggedIn && !isRunning && (
-          <Button
-            variant="trading-ghost"
-            size="sm"
-            className="h-7 text-xs gap-1.5"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            <Save size={14} />
-            {saving ? "Salvando..." : "Salvar"}
-          </Button>
-        )}
-      </div>
+      <h2 className="text-xs font-heading font-semibold text-muted-foreground tracking-wider uppercase mb-4">
+        Configuração
+      </h2>
 
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">

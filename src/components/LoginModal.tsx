@@ -16,11 +16,20 @@ interface LoginModalProps {
 
 type AuthMode = "login" | "signup" | "broker";
 
+const normalizeUsername = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
 const LoginModal = ({ open, onOpenChange }: LoginModalProps) => {
   const [mode, setMode] = useState<AuthMode>("login");
+  const [identifier, setIdentifier] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [brokerUser, setBrokerUser] = useState("");
   const [brokerPass, setBrokerPass] = useState("");
 
@@ -34,11 +43,11 @@ const LoginModal = ({ open, onOpenChange }: LoginModalProps) => {
     e.preventDefault();
     try {
       if (mode === "signup") {
-        await signUp(email, password, name);
+        await signUp(email, password, username, name);
         toast.success("Conta criada! Verifique seu email.");
         setMode("broker");
       } else {
-        await signIn(email, password);
+        await signIn(identifier, password);
         toast.success("Login realizado!");
         if (!isBrokerConnected) {
           setMode("broker");
@@ -60,6 +69,13 @@ const LoginModal = ({ open, onOpenChange }: LoginModalProps) => {
 
   const resetAndClose = () => {
     setMode("login");
+    setIdentifier("");
+    setEmail("");
+    setPassword("");
+    setName("");
+    setUsername("");
+    setBrokerUser("");
+    setBrokerPass("");
     onOpenChange(false);
   };
 
@@ -141,27 +157,57 @@ const LoginModal = ({ open, onOpenChange }: LoginModalProps) => {
         ) : (
           <form onSubmit={handleAuth} className="space-y-4">
             {mode === "signup" && (
+              <>
+                <div>
+                  <label className="text-sm text-muted-foreground mb-1.5 block">Usuário</label>
+                  <Input
+                    value={username}
+                    onChange={(e) => setUsername(normalizeUsername(e.target.value))}
+                    className="bg-secondary border-border text-foreground h-12 rounded-xl"
+                    placeholder="seu_usuario"
+                    required
+                    minLength={3}
+                    maxLength={30}
+                    pattern="[a-z0-9_]{3,30}"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground mb-1.5 block">Nome</label>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="bg-secondary border-border text-foreground h-12 rounded-xl"
+                    placeholder="Seu nome"
+                  />
+                </div>
+              </>
+            )}
+            {mode === "signup" ? (
               <div>
-                <label className="text-sm text-muted-foreground mb-1.5 block">Nome</label>
+                <label className="text-sm text-muted-foreground mb-1.5 block">Email</label>
                 <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="bg-secondary border-border text-foreground h-12 rounded-xl"
-                  placeholder="Seu nome"
+                  placeholder="seu@email.com"
+                  required
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="text-sm text-muted-foreground mb-1.5 block">Usuário</label>
+                <Input
+                  value={identifier}
+                  onChange={(e) => setIdentifier(normalizeUsername(e.target.value))}
+                  className="bg-secondary border-border text-foreground h-12 rounded-xl"
+                  placeholder="seu_usuario"
+                  required
+                  minLength={3}
+                  maxLength={30}
                 />
               </div>
             )}
-            <div>
-              <label className="text-sm text-muted-foreground mb-1.5 block">Email</label>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="bg-secondary border-border text-foreground h-12 rounded-xl"
-                placeholder="seu@email.com"
-                required
-              />
-            </div>
             <div>
               <label className="text-sm text-muted-foreground mb-1.5 block">Senha</label>
               <Input

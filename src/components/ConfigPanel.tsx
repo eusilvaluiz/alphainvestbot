@@ -22,6 +22,7 @@ interface ConfigPanelProps {
   isProcessing: boolean;
   onStart: (config: BotConfig) => void;
   onStop: () => void;
+  onModelChange?: (model: AiModel) => void;
 }
 
 const ConfigPanel = ({

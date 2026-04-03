@@ -96,6 +96,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          email: string | null
           id: string
           name: string | null
           updated_at: string
@@ -105,6 +106,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           name?: string | null
           updated_at?: string
@@ -114,6 +116,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           name?: string | null
           updated_at?: string
@@ -181,6 +184,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_profile_email_by_username: {
+        Args: { _username: string }
+        Returns: string
+      }
       normalize_username_value: {
         Args: { input_username: string }
         Returns: string

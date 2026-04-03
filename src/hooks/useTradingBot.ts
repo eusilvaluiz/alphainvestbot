@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { alphaApi, type OpenPositionResponse, type Symbol as ApiSymbol } from "@/lib/api";
 import { useAuth } from "./useAuth";
 
@@ -20,25 +20,68 @@ export interface TradeEntry {
 
 interface BotConfig {
   entryValue: number;
-  position: number; // martingale iterations
+  position: number;
   stopWin: number;
   stopLoss: number;
   model: string;
 }
 
+interface PersistedBotState {
+  running: boolean;
+  config: BotConfig | null;
+  symbolCode: string | null;
+  trades: TradeEntry[];
+  profitLoss: number;
+  wins: number;
+  losses: number;
+  operations: number;
+  martingaleLevel: number;
+  lastDirection: "up" | "down" | null;
+  directionCounter: number;
+}
+
+const STORAGE_KEY = "alpha_bot_state";
+
+function loadState(): PersistedBotState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PersistedBotState;
+  } catch {
+    return null;
+  }
+}
+
+function saveState(state: PersistedBotState) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch { /* quota exceeded — ignore */ }
+}
+
+function clearState() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch { /* ignore */ }
+}
+
 export const useTradingBot = () => {
   const { brokerSession } = useAuth();
-  const [isRunning, setIsRunning] = useState(false);
+
+  // Load persisted state once
+  const persisted = useRef(loadState());
+  const p = persisted.current;
+
+  const [isRunning, setIsRunning] = useState(p?.running ?? false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [trades, setTrades] = useState<TradeEntry[]>([]);
-  const [profitLoss, setProfitLoss] = useState(0);
-  const [wins, setWins] = useState(0);
-  const [losses, setLosses] = useState(0);
-  const [operations, setOperations] = useState(0);
+  const [trades, setTrades] = useState<TradeEntry[]>(p?.trades ?? []);
+  const [profitLoss, setProfitLoss] = useState(p?.profitLoss ?? 0);
+  const [wins, setWins] = useState(p?.wins ?? 0);
+  const [losses, setLosses] = useState(p?.losses ?? 0);
+  const [operations, setOperations] = useState(p?.operations ?? 0);
   const [balance, setBalance] = useState(0);
-  const [status, setStatus] = useState("Parado");
-  const [currentMartingaleLevel, setCurrentMartingaleLevel] = useState(0);
-  const [isMartingale, setIsMartingale] = useState(false);
+  const [status, setStatus] = useState(p?.running ? "Retomando..." : "Parado");
+  const [currentMartingaleLevel, setCurrentMartingaleLevel] = useState(p?.martingaleLevel ?? 0);
+  const [isMartingale, setIsMartingale] = useState((p?.martingaleLevel ?? 0) > 0);
 
   const botRef = useRef<{
     running: boolean;
@@ -47,17 +90,40 @@ export const useTradingBot = () => {
     currentPrice: number;
     profitLoss: number;
   }>({
-    running: false,
-    config: null,
+    running: p?.running ?? false,
+    config: p?.config ?? null,
     symbol: null,
     currentPrice: 0,
-    profitLoss: 0,
+    profitLoss: p?.profitLoss ?? 0,
   });
 
-  // Alternating direction counter (same as base site)
-  const directionCounter = useRef(Math.floor(Math.random() * 2));
-  const martingaleLevel = useRef(0);
-  const lastDirection = useRef<"up" | "down" | null>(null);
+  const directionCounter = useRef(p?.directionCounter ?? Math.floor(Math.random() * 2));
+  const martingaleLevel = useRef(p?.martingaleLevel ?? 0);
+  const lastDirection = useRef<"up" | "down" | null>(p?.lastDirection ?? null);
+  const resumedRef = useRef(false);
+
+  // Persist state on every meaningful change
+  const persistNow = useCallback(() => {
+    const state: PersistedBotState = {
+      running: botRef.current.running,
+      config: botRef.current.config,
+      symbolCode: botRef.current.symbol?.code ?? null,
+      trades: [], // will be filled below
+      profitLoss: botRef.current.profitLoss,
+      wins: 0,
+      losses: 0,
+      operations: 0,
+      martingaleLevel: martingaleLevel.current,
+      lastDirection: lastDirection.current,
+      directionCounter: directionCounter.current,
+    };
+    // We read the latest from setters
+    setTrades((t) => { state.trades = t; return t; });
+    setWins((w) => { state.wins = w; return w; });
+    setLosses((l) => { state.losses = l; return l; });
+    setOperations((o) => { state.operations = o; return o; });
+    saveState(state);
+  }, []);
 
   const getNextDirection = useCallback((): "up" | "down" => {
     directionCounter.current += 1;
@@ -73,6 +139,23 @@ export const useTradingBot = () => {
     setCurrentMartingaleLevel(0);
     setIsMartingale(false);
     lastDirection.current = null;
+    // Keep trades in state but mark bot as stopped in storage
+    setTrades((t) => {
+      saveState({
+        running: false,
+        config: null,
+        symbolCode: null,
+        trades: t,
+        profitLoss: botRef.current.profitLoss,
+        wins: 0,
+        losses: 0,
+        operations: 0,
+        martingaleLevel: 0,
+        lastDirection: null,
+        directionCounter: directionCounter.current,
+      });
+      return t;
+    });
   }, []);
 
   const updateCurrentPrice = useCallback((price: number) => {
@@ -86,22 +169,17 @@ export const useTradingBot = () => {
 
   const waitUntilTimestamp = useCallback((targetTimestamp: number): Promise<void> => {
     return new Promise((resolve) => {
-      let checkInterval: ReturnType<typeof setInterval> | undefined;
-
       const resolveIfReady = () => {
         const now = Math.floor(Date.now() / 1000);
         if (now >= targetTimestamp || !botRef.current.running) {
-          if (checkInterval) {
-            clearInterval(checkInterval);
-          }
+          if (checkInterval) clearInterval(checkInterval);
           resolve();
           return true;
         }
         return false;
       };
-
       if (resolveIfReady()) return;
-      checkInterval = setInterval(resolveIfReady, 100);
+      const checkInterval = setInterval(resolveIfReady, 100);
     });
   }, []);
 
@@ -131,27 +209,24 @@ export const useTradingBot = () => {
 
       setIsProcessing(true);
       setStatus("Aguardando candle...");
+      persistNow();
 
       try {
         const entryTimestamp =
           scheduledEntryTimestamp ?? getRandomFirstEntryTimestamp();
 
         await waitUntilTimestamp(entryTimestamp);
-
         if (!botRef.current.running) return;
 
-        // Determine direction
         let direction: "up" | "down";
         let currentAmount = config.entryValue;
         const level = martingaleLevel.current;
 
         if (level > 0 && lastDirection.current) {
-          // Martingale: keep same direction, increase amount
           direction = lastDirection.current;
           currentAmount = config.entryValue * Math.pow(2, level);
           setIsMartingale(true);
         } else {
-          // Normal: get next alternating direction
           direction = getNextDirection();
           lastDirection.current = direction;
           setIsMartingale(false);
@@ -159,11 +234,9 @@ export const useTradingBot = () => {
 
         setStatus("Entrando...");
 
-        // Format amount: "766,00"
         const amountStr = currentAmount.toFixed(2).replace(".", ",");
         const directionNum = direction === "up" ? 1 : 0;
 
-        // Open real position
         const result: OpenPositionResponse = await alphaApi.openPosition({
           symbol: symbol.code,
           direction: directionNum,
@@ -192,7 +265,6 @@ export const useTradingBot = () => {
         setOperations((prev) => prev + 1);
         setStatus("Ativo");
 
-        // Update balance
         const creditStr = result.user_credit;
         const creditCents = parseInt(
           creditStr.replace(/\./g, "").replace(",", "")
@@ -201,10 +273,9 @@ export const useTradingBot = () => {
         alphaApi.updateSessionCredit(creditStr, creditCents);
 
         setIsProcessing(false);
+        persistNow();
 
-        // Wait for expiration
         await waitForExpiration(result.expiration_timestamp);
-
         if (!botRef.current.running) return;
 
         setIsProcessing(true);
@@ -215,18 +286,11 @@ export const useTradingBot = () => {
 
         for (let attempt = 0; attempt < 12; attempt += 1) {
           if (!botRef.current.running) return;
-
           settlement = await alphaApi.getSettlement();
           txn = await alphaApi.getTransaction(result.transaction_id);
-
           const statusId = txn.transaction.status_id;
-          if (statusId === 1 || statusId === 2) {
-            break;
-          }
-
-          if (attempt < 11) {
-            await new Promise((r) => setTimeout(r, 250));
-          }
+          if (statusId === 1 || statusId === 2) break;
+          if (attempt < 11) await new Promise((r) => setTimeout(r, 250));
         }
 
         if (!botRef.current.running || !settlement || !txn) return;
@@ -236,7 +300,6 @@ export const useTradingBot = () => {
           settlement.result_type === 2 || txn.transaction.status_id === 2;
         const resultAmount = settlement.amount_result_cents / 100;
 
-        // Update trade result
         setTrades((prev) =>
           prev.map((t) =>
             t.id === result.transaction_id
@@ -249,7 +312,6 @@ export const useTradingBot = () => {
           )
         );
 
-        // Update stats
         let newPL = botRef.current.profitLoss;
         if (isWin) {
           setWins((prev) => prev + 1);
@@ -261,7 +323,6 @@ export const useTradingBot = () => {
         setProfitLoss(newPL);
         botRef.current.profitLoss = newPL;
 
-        // Update balance
         setBalance(balanceData.credit_cents / 100);
         alphaApi.updateSessionCredit(
           balanceData.credit,
@@ -269,8 +330,8 @@ export const useTradingBot = () => {
         );
 
         setIsProcessing(false);
+        persistNow();
 
-        // Check stop win / stop loss
         if (newPL <= -config.stopLoss) {
           setStatus("Stop Loss");
           stopBot();
@@ -282,23 +343,18 @@ export const useTradingBot = () => {
           return;
         }
 
-        // Martingale logic (same as base site)
         if (isWin) {
-          // Win: reset martingale, get new direction
           martingaleLevel.current = 0;
           setCurrentMartingaleLevel(0);
           setIsMartingale(false);
           lastDirection.current = null;
         } else {
-          // Loss: check if we can increase martingale
           const currentLevel = martingaleLevel.current;
           if (currentLevel < config.position) {
-            // Increase martingale level, keep same direction
             martingaleLevel.current = currentLevel + 1;
             setCurrentMartingaleLevel(currentLevel + 1);
             setIsMartingale(true);
           } else {
-            // Max martingale reached: reset, get new direction
             martingaleLevel.current = 0;
             setCurrentMartingaleLevel(0);
             setIsMartingale(false);
@@ -306,11 +362,11 @@ export const useTradingBot = () => {
           }
         }
 
-        // Continue trading cycle on the candle immediately after expiration
         if (botRef.current.running) {
           const nextEntryTimestamp = getNextCandleOpenTimestamp(
             result.expiration_timestamp
           );
+          persistNow();
           void executeTradeCycle(config, symbol, nextEntryTimestamp);
         }
       } catch (error) {
@@ -333,7 +389,48 @@ export const useTradingBot = () => {
       waitForExpiration,
       waitUntilTimestamp,
       stopBot,
+      persistNow,
     ]
+  );
+
+  // Resume bot after refresh when symbols are loaded
+  const resumeBot = useCallback(
+    (symbols: ApiSymbol[]) => {
+      if (resumedRef.current) return;
+      const saved = persisted.current;
+      if (!saved?.running || !saved.config || !saved.symbolCode || !brokerSession) return;
+      resumedRef.current = true;
+
+      const sym = symbols.find((s) => s.code === saved.symbolCode);
+      if (!sym) return;
+
+      botRef.current.symbol = sym;
+      botRef.current.config = saved.config;
+      botRef.current.running = true;
+
+      setIsRunning(true);
+      setBalance(brokerSession.creditCents / 100);
+
+      // Check if there's an open trade that hasn't expired yet
+      const openTrade = saved.trades.find((t) => t.status === "open");
+      if (openTrade) {
+        const now = Math.floor(Date.now() / 1000);
+        if (now < openTrade.expirationTimestamp) {
+          // Still active — wait for expiration then continue
+          setStatus("Ativo");
+          // We can't fully resume mid-trade settlement easily,
+          // so we wait for next candle after expiration
+          const nextEntry = getNextCandleOpenTimestamp(openTrade.expirationTimestamp);
+          void executeTradeCycle(saved.config, sym, nextEntry);
+          return;
+        }
+      }
+
+      // No open trade or already expired — schedule next candle
+      const nextEntry = getNextCandleOpenTimestamp(Math.floor(Date.now() / 1000));
+      void executeTradeCycle(saved.config, sym, nextEntry);
+    },
+    [brokerSession, executeTradeCycle, getNextCandleOpenTimestamp]
   );
 
   const startBot = useCallback(
@@ -360,9 +457,10 @@ export const useTradingBot = () => {
       setIsMartingale(false);
 
       const firstEntryTimestamp = getRandomFirstEntryTimestamp();
+      persistNow();
       void executeTradeCycle(config, symbol, firstEntryTimestamp);
     },
-    [brokerSession, executeTradeCycle, getRandomFirstEntryTimestamp]
+    [brokerSession, executeTradeCycle, getRandomFirstEntryTimestamp, persistNow]
   );
 
   const winRate = operations > 0 ? (wins / operations) * 100 : 0;
@@ -383,5 +481,6 @@ export const useTradingBot = () => {
     updateCurrentPrice,
     currentMartingaleLevel,
     isMartingale,
+    resumeBot,
   };
 };

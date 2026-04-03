@@ -61,7 +61,7 @@ const CandlestickChart = () => {
       },
     });
 
-    const series = chart.addSeries(CandlestickSeries, {
+    const series = chart.addCandlestickSeries({
       upColor: "hsl(145, 65%, 45%)",
       downColor: "hsl(0, 70%, 55%)",
       borderUpColor: "hsl(145, 65%, 45%)",

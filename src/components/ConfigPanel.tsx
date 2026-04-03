@@ -227,7 +227,7 @@ const ConfigPanel = ({
               variant={selectedModel === model.id ? "trading" : "trading-ghost"}
               size="sm"
               className="text-xs"
-              onClick={() => setSelectedModel(model.id)}
+              onClick={() => { setSelectedModel(model.id); onModelChange?.(model.id); }}
               disabled={isRunning}
             >
               {model.label}

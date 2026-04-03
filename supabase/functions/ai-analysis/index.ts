@@ -62,7 +62,7 @@ Gere UMA análise curta sobre o momento atual deste ativo.`;
             { role: "user", content: userContext },
           ],
           ...(isOpenAI
-            ? { max_completion_tokens: 1000, reasoning: { effort: "low" } }
+            ? { max_completion_tokens: 2000 }
             : { max_tokens: 200, temperature: 0.9 }),
         }),
       }

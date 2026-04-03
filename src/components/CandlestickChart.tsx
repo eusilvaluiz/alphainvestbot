@@ -36,25 +36,38 @@ type ChartCandle = {
 // Client-side session cookie cache
 let cachedSessionCookies: string | null = null;
 
-async function fetchUnicCandles(symbol: string, countback = 300) {
+async function fetchUnicCandles(
+  symbol: string,
+  countback = 300,
+  options?: { forceFreshSession?: boolean }
+) {
   try {
     const stored = localStorage.getItem("broker_credentials");
     if (!stored) return null;
     const { user, pass } = JSON.parse(stored);
     if (!user || !pass) return null;
 
+    const body: Record<string, unknown> = {
+      symbol,
+      resolution: "1",
+      countback,
+      broker_user: user,
+      broker_pass: pass,
+      force_refresh_session: !!options?.forceFreshSession,
+    };
+
+    if (!options?.forceFreshSession && cachedSessionCookies) {
+      body.session_cookies = cachedSessionCookies;
+    }
+
     const { data, error } = await supabase.functions.invoke("unic-chart", {
-      body: {
-        symbol,
-        resolution: "1",
-        countback,
-        broker_user: user,
-        broker_pass: pass,
-        session_cookies: cachedSessionCookies,
-      },
+      body,
     });
 
-    if (error || !data || data.s !== "ok" || !data.t?.length) return null;
+    if (error || !data || data.s !== "ok" || !data.t?.length) {
+      cachedSessionCookies = null;
+      return null;
+    }
 
     if (data.session_cookies) {
       cachedSessionCookies = data.session_cookies;
@@ -93,6 +106,8 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | null> {
 
 const BRAND_URL = "unicbroker.com";
 const HISTORICAL_SYNC_INTERVAL_MS = 1000;
+const REALTIME_SYNC_DEBOUNCE_MS = 700;
+const FORCE_FRESH_SESSION_EVERY_MS = 3000;
 
 const parseNumber = (value: unknown) => {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -145,6 +160,9 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
   const entryLinesRef = useRef<Map<number, any>>(new Map());
   const lastCandleRef = useRef<ChartCandle | null>(null);
   const ablyClientRef = useRef<Ably.Realtime | null>(null);
+  const syncInFlightRef = useRef(false);
+  const lastRealtimeSyncAtRef = useRef(0);
+  const lastFreshSessionSyncAtRef = useRef(0);
   const [currentPrice, setCurrentPrice] = useState(0);
   const [stats, setStats] = useState({ open: 0, high: 0, low: 0 });
   const [showDropdown, setShowDropdown] = useState(false);
@@ -212,6 +230,9 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
     lastCandleRef.current = null;
     entryLinesRef.current.clear();
+    syncInFlightRef.current = false;
+    lastRealtimeSyncAtRef.current = 0;
+    lastFreshSessionSyncAtRef.current = 0;
     setRealtimeStatus("disconnected");
 
     const chart = createChart(chartContainerRef.current, {
@@ -270,50 +291,37 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
     };
 
-    // Apply tick to current candle (same logic as traderoom)
-    const applyTick = (closePrice: number, timestamp: number) => {
-      const candleTime = Math.floor(timestamp / 60) * 60;
-      const last = lastCandleRef.current;
-
-      let candle: ChartCandle;
-      if (!last || last.time !== candleTime) {
-        candle = {
-          time: candleTime,
-          open: last ? last.close : closePrice,
-          high: closePrice,
-          low: closePrice,
-          close: closePrice,
-        };
-      } else {
-        candle = {
-          time: last.time,
-          open: last.open,
-          high: Math.max(last.high, closePrice),
-          low: Math.min(last.low, closePrice),
-          close: closePrice,
-        };
-      }
-
-      lastCandleRef.current = candle;
-      series.update(candle as any);
-      setCurrentPrice(closePrice);
-      onPriceUpdate?.(closePrice);
-    };
-
-    const syncFromUnic = async (fitContent = false) => {
+    const syncFromUnic = async (fitContent = false, source: "initial" | "poll" | "realtime" = "poll") => {
       if (!isBrokerConnected) return false;
 
-      const unicData = await fetchUnicCandles(selectedSymbol.code, 300);
-      if (!unicData || unicData.length === 0 || isDisposed) return false;
+      if (syncInFlightRef.current) return false;
+      syncInFlightRef.current = true;
 
-      setDataSource("unic");
-      applyHistoricalData(unicData, fitContent);
-      return true;
+      try {
+        const shouldForceFreshSession =
+          source === "initial" ||
+          Date.now() - lastFreshSessionSyncAtRef.current >= FORCE_FRESH_SESSION_EVERY_MS;
+
+        const unicData = await fetchUnicCandles(selectedSymbol.code, 300, {
+          forceFreshSession: shouldForceFreshSession,
+        });
+        if (!unicData || unicData.length === 0 || isDisposed) return false;
+
+        if (shouldForceFreshSession) {
+          lastFreshSessionSyncAtRef.current = Date.now();
+        }
+
+        setDataSource("unic");
+        applyHistoricalData(unicData, fitContent);
+        return true;
+      } finally {
+        syncInFlightRef.current = false;
+      }
     };
 
     // Load initial historical data
     const loadInitialData = async () => {
-      const loadedFromUnic = await syncFromUnic(true);
+      const loadedFromUnic = await syncFromUnic(true, "initial");
       if (loadedFromUnic) return;
 
       setDataSource("alpha");
@@ -337,7 +345,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       if (!isBrokerConnected) return;
 
       syncInterval = window.setInterval(() => {
-        void syncFromUnic(false);
+        void syncFromUnic(false, "poll");
       }, HISTORICAL_SYNC_INTERVAL_MS);
     };
 
@@ -390,7 +398,13 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       derivedChannel.subscribe((message: Ably.Message) => {
         const tick = parseRealtimeTick(message.data);
         if (tick) {
-          applyTick(tick.closePrice, tick.timestamp);
+          const now = Date.now();
+          if (now - lastRealtimeSyncAtRef.current < REALTIME_SYNC_DEBOUNCE_MS) {
+            return;
+          }
+
+          lastRealtimeSyncAtRef.current = now;
+          void syncFromUnic(false, "realtime");
         }
       });
 

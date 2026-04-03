@@ -8,14 +8,7 @@ const corsHeaders = {
 
 const UNIC_BASE = "https://unicbroker.com";
 
-const sessionCache = new Map<string, { cookies: string; expires: number }>();
-
-async function getUnicSession(brokerUser: string, brokerPass: string): Promise<string | null> {
-  const cached = sessionCache.get(brokerUser);
-  if (cached && cached.expires > Date.now()) {
-    return cached.cookies;
-  }
-
+async function doLogin(brokerUser: string, brokerPass: string): Promise<string | null> {
   try {
     const initRes = await fetch(`${UNIC_BASE}/login`, {
       method: "GET",
@@ -83,20 +76,11 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
       return null;
     }
 
-    sessionCache.set(brokerUser, {
-      cookies: finalCookies,
-      expires: Date.now() + 30 * 60 * 1000,
-    });
-
     return finalCookies;
   } catch (error) {
-    console.error("Session error:", error);
+    console.error("Login error:", error);
     return null;
   }
-}
-
-function clearSession(brokerUser: string) {
-  sessionCache.delete(brokerUser);
 }
 
 async function fetchUdf(cookies: string, symbol: string, resolution: string, countback: number) {
@@ -104,7 +88,7 @@ async function fetchUdf(cookies: string, symbol: string, resolution: string, cou
   const from = now - countback * 60;
   const udfUrl = `${UNIC_BASE}/publicapi/tradingview/udf-history?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&countback=${countback}&site=unicbroker.com`;
 
-  const udfRes = await fetch(udfUrl, {
+  return await fetch(udfUrl, {
     headers: {
       Cookie: cookies,
       Referer: `${UNIC_BASE}/traderoom`,
@@ -112,8 +96,6 @@ async function fetchUdf(cookies: string, symbol: string, resolution: string, cou
       Accept: "application/json",
     },
   });
-
-  return udfRes;
 }
 
 serve(async (req) => {
@@ -130,7 +112,6 @@ serve(async (req) => {
       broker_user,
       broker_pass,
       session_cookies,
-      force_refresh_session = false,
     } = body;
 
     if (!broker_user || !broker_pass) {
@@ -140,12 +121,8 @@ serve(async (req) => {
       );
     }
 
-    if (force_refresh_session) {
-      clearSession(broker_user);
-    }
-
-    // Try client-provided session cookies first (skip login)
-    if (session_cookies && !force_refresh_session) {
+    // 1) Try client-provided session cookies first (no login needed)
+    if (session_cookies) {
       try {
         const udfRes = await fetchUdf(session_cookies, symbol, resolution, countback);
         if (udfRes.ok) {
@@ -157,16 +134,16 @@ serve(async (req) => {
           }
         } else {
           await udfRes.text(); // consume body
+          console.log("Client cookies expired, will re-login");
         }
       } catch {
-        // Session expired, fall through to re-login
+        console.log("Client cookies failed, will re-login");
       }
     }
 
-    // Full login flow
-    const cookies = await getUnicSession(broker_user, broker_pass);
+    // 2) Full login flow - only when cookies are missing or expired
+    const cookies = await doLogin(broker_user, broker_pass);
     if (!cookies) {
-      clearSession(broker_user);
       return new Response(
         JSON.stringify({ error: "Failed to authenticate with broker" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -176,9 +153,8 @@ serve(async (req) => {
     const udfRes = await fetchUdf(cookies, symbol, resolution, countback);
 
     if (!udfRes.ok) {
-      clearSession(broker_user);
       const errText = await udfRes.text();
-      console.error("UDF fetch failed:", udfRes.status, errText);
+      console.error("UDF fetch failed after fresh login:", udfRes.status, errText);
       return new Response(
         JSON.stringify({ error: "Failed to fetch chart data" }),
         { status: udfRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -186,7 +162,7 @@ serve(async (req) => {
     }
 
     const data = await udfRes.json();
-    // Return session_cookies so client can reuse them
+    // Return fresh session_cookies so client caches them for next calls
     return new Response(JSON.stringify({ ...data, session_cookies: cookies }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

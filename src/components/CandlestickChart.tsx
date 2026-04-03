@@ -36,11 +36,7 @@ type ChartCandle = {
 // Client-side session cookie cache
 let cachedSessionCookies: string | null = null;
 
-async function fetchUnicCandles(
-  symbol: string,
-  countback = 300,
-  options?: { forceFreshSession?: boolean }
-) {
+async function fetchUnicCandles(symbol: string, countback = 300) {
   try {
     const stored = localStorage.getItem("broker_credentials");
     if (!stored) return null;
@@ -53,10 +49,10 @@ async function fetchUnicCandles(
       countback,
       broker_user: user,
       broker_pass: pass,
-      force_refresh_session: !!options?.forceFreshSession,
     };
 
-    if (!options?.forceFreshSession && cachedSessionCookies) {
+    // Send cached cookies so edge function can skip login
+    if (cachedSessionCookies) {
       body.session_cookies = cachedSessionCookies;
     }
 
@@ -65,10 +61,12 @@ async function fetchUnicCandles(
     });
 
     if (error || !data || data.s !== "ok" || !data.t?.length) {
+      // If failed, clear cached cookies so next call forces fresh login
       cachedSessionCookies = null;
       return null;
     }
 
+    // Cache the session cookies returned by edge function
     if (data.session_cookies) {
       cachedSessionCookies = data.session_cookies;
     }

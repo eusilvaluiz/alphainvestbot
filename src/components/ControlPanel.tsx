@@ -33,7 +33,7 @@ const ControlPanel = ({
         <div className="bg-secondary rounded-lg p-3">
           <span className="text-xs text-muted-foreground">Status</span>
           <p className="text-lg font-semibold text-foreground mt-1 flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${status === "Operando" ? "bg-chart-green" : "bg-muted-foreground"}`} />
+            <span className={`w-2 h-2 rounded-full ${status === "Ativo" ? "bg-chart-green animate-pulse" : "bg-muted-foreground"}`} />
             {status}
           </p>
         </div>

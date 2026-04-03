@@ -18,7 +18,12 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY)
       throw new Error("LOVABLE_API_KEY is not configured");
 
-    const aiModel = model || "google/gemini-3-flash-preview";
+    const modelMap: Record<string, string> = {
+      gpt: "openai/gpt-5-mini",
+      claude: "google/gemini-2.5-pro",
+      grok: "google/gemini-3-flash-preview",
+    };
+    const aiModel = modelMap[model] || model || "google/gemini-3-flash-preview";
 
     const systemPrompt = `Você é um analista de mercado financeiro especializado em opções binárias e criptomoedas.
 Seu papel é gerar análises curtas e incisivas sobre o ativo que o trader está observando.
@@ -41,6 +46,7 @@ ${isTrading ? `Bot operando - Direção: ${direction}` : "Bot parado - apenas ob
 
 Gere UMA análise curta sobre o momento atual deste ativo.`;
 
+    const isOpenAI = aiModel.startsWith("openai/");
     const response = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
@@ -55,8 +61,9 @@ Gere UMA análise curta sobre o momento atual deste ativo.`;
             { role: "system", content: systemPrompt },
             { role: "user", content: userContext },
           ],
-          max_tokens: 100,
-          temperature: 0.9,
+          ...(isOpenAI
+            ? { max_completion_tokens: 2000 }
+            : { max_tokens: 200, temperature: 0.9 }),
         }),
       }
     );

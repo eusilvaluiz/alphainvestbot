@@ -191,11 +191,11 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
     };
 
-    const syncChartData = async (fitContent = false) => {
+    const loadInitialData = async () => {
       const unicData = await fetchUnicCandles(selectedSymbol.code, 300);
       if (unicData && unicData.length > 0) {
         setDataSource("unic");
-        applyChartData(unicData, fitContent);
+        applyChartData(unicData, true);
         return;
       }
 
@@ -208,10 +208,25 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         low: parseFloat(c.lower),
         close: parseFloat(c.close),
       }));
-      applyChartData(chartData, fitContent);
+      applyChartData(chartData, true);
     };
 
-    void syncChartData(true);
+    // Lightweight poll: only fetch last 10 candles and update them individually
+    const pollUpdates = async () => {
+      try {
+        const unicData = await fetchUnicCandles(selectedSymbol.code, 10);
+        if (unicData && unicData.length > 0) {
+          for (const candle of unicData) {
+            series.update(candle as any);
+          }
+          const last = unicData[unicData.length - 1];
+          setCurrentPrice(last.close);
+          onPriceUpdate?.(last.close);
+        }
+      } catch {}
+    };
+
+    void loadInitialData();
 
     const handleResize = () => {
       if (chartContainerRef.current) {
@@ -220,9 +235,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     };
     window.addEventListener("resize", handleResize);
 
-    const interval = setInterval(() => {
-      void syncChartData(false);
-    }, 1000);
+    const interval = setInterval(pollUpdates, 1000);
 
     return () => {
       clearInterval(interval);

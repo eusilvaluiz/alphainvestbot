@@ -1,4 +1,4 @@
-const API_BASE = "https://www.alphainvestbot.com/api";
+const API_BASE = "/alpha-api";
 
 export interface Symbol {
   id: number;

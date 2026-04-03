@@ -95,6 +95,10 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
   }
 }
 
+function clearSession(brokerUser: string) {
+  sessionCache.delete(brokerUser);
+}
+
 async function fetchUdf(cookies: string, symbol: string, resolution: string, countback: number) {
   const now = Math.floor(Date.now() / 1000);
   const from = now - countback * 60;
@@ -126,6 +130,7 @@ serve(async (req) => {
       broker_user,
       broker_pass,
       session_cookies,
+      force_refresh_session = false,
     } = body;
 
     if (!broker_user || !broker_pass) {
@@ -135,8 +140,12 @@ serve(async (req) => {
       );
     }
 
+    if (force_refresh_session) {
+      clearSession(broker_user);
+    }
+
     // Try client-provided session cookies first (skip login)
-    if (session_cookies) {
+    if (session_cookies && !force_refresh_session) {
       try {
         const udfRes = await fetchUdf(session_cookies, symbol, resolution, countback);
         if (udfRes.ok) {
@@ -157,6 +166,7 @@ serve(async (req) => {
     // Full login flow
     const cookies = await getUnicSession(broker_user, broker_pass);
     if (!cookies) {
+      clearSession(broker_user);
       return new Response(
         JSON.stringify({ error: "Failed to authenticate with broker" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -166,7 +176,7 @@ serve(async (req) => {
     const udfRes = await fetchUdf(cookies, symbol, resolution, countback);
 
     if (!udfRes.ok) {
-      if (udfRes.status === 401) sessionCache.delete(broker_user);
+      clearSession(broker_user);
       const errText = await udfRes.text();
       console.error("UDF fetch failed:", udfRes.status, errText);
       return new Response(

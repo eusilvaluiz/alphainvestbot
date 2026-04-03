@@ -1,4 +1,4 @@
-import { ArrowUp, ArrowDown, History, X } from "lucide-react";
+import { ArrowUp, ArrowDown, History, Trash2 } from "lucide-react";
 import { type TradeEntry } from "@/hooks/useTradingBot";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 
 interface HistorySidebarProps {
   entries: TradeEntry[];
+  onClearHistory?: () => void;
 }
 
 const TradeCard = ({ entry }: { entry: TradeEntry }) => {

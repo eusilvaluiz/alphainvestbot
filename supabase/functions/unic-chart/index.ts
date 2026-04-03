@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const UNIC_BASE = "https://unicbroker.com";
 
-// Cache session cookies per broker user
+// Cache session cookies per broker user (in-memory, resets on cold start)
 const sessionCache = new Map<string, { cookies: string; expires: number }>();
 
 async function getUnicSession(brokerUser: string, brokerPass: string): Promise<string | null> {
@@ -18,25 +18,59 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
   }
 
   try {
-    // Step 1: Get CSRF token and session cookie
+    // Step 1: Get CSRF token and session cookies from login page
     const initRes = await fetch(`${UNIC_BASE}/login`, {
       method: "GET",
-      headers: { "User-Agent": "Mozilla/5.0" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "text/html",
+      },
       redirect: "follow",
     });
 
-    const setCookieHeaders = initRes.headers.getSetCookie?.() || [];
-    let cookies = setCookieHeaders
-      .map((c: string) => c.split(";")[0])
-      .join("; ");
+    // Collect cookies
+    const setCookieHeaders: string[] = [];
+    for (const [key, val] of initRes.headers.entries()) {
+      if (key.toLowerCase() === "set-cookie") {
+        setCookieHeaders.push(val);
+      }
+    }
 
-    // Extract XSRF token from cookies
-    const xsrfMatch = cookies.match(/XSRF-TOKEN=([^;]+)/);
-    if (!xsrfMatch) {
-      console.error("No XSRF token found");
+    // Parse cookies into a map
+    const cookieMap = new Map<string, string>();
+    const rawHeader = initRes.headers.get("set-cookie") || "";
+    
+    // Try getSetCookie first (Deno supports it)
+    const allCookies = (initRes.headers as any).getSetCookie?.() as string[] | undefined;
+    if (allCookies && allCookies.length > 0) {
+      for (const c of allCookies) {
+        const cookiePart = c.split(";")[0];
+        const eqIdx = cookiePart.indexOf("=");
+        if (eqIdx > 0) {
+          cookieMap.set(cookiePart.substring(0, eqIdx), cookiePart);
+        }
+      }
+    } else if (rawHeader) {
+      // Fallback: split by comma, but carefully (cookies can contain commas in dates)
+      for (const part of rawHeader.split(/,(?=\s*[A-Za-z_-]+=)/)) {
+        const cookiePart = part.trim().split(";")[0];
+        const eqIdx = cookiePart.indexOf("=");
+        if (eqIdx > 0) {
+          cookieMap.set(cookiePart.substring(0, eqIdx), cookiePart);
+        }
+      }
+    }
+
+    let cookies = Array.from(cookieMap.values()).join("; ");
+
+    // Extract XSRF token
+    const xsrfCookie = cookieMap.get("XSRF-TOKEN");
+    if (!xsrfCookie) {
+      console.error("No XSRF-TOKEN cookie found. Cookies:", cookies);
       return null;
     }
-    const xsrfToken = decodeURIComponent(xsrfMatch[1]);
+    const xsrfValue = xsrfCookie.split("=").slice(1).join("=");
+    const xsrfToken = decodeURIComponent(xsrfValue);
 
     // Step 2: Login
     const loginRes = await fetch(`${UNIC_BASE}/publicapi/auth/login/web`, {
@@ -46,34 +80,31 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
         "X-XSRF-TOKEN": xsrfToken,
         Cookie: cookies,
         Referer: `${UNIC_BASE}/login`,
-        "User-Agent": "Mozilla/5.0",
+        Origin: UNIC_BASE,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "application/json",
       },
       body: JSON.stringify({ login: brokerUser, password: brokerPass }),
       redirect: "follow",
     });
 
-    // Merge new cookies from login response
-    const loginCookies = loginRes.headers.getSetCookie?.() || [];
-    const cookieMap = new Map<string, string>();
-    
-    // Parse existing cookies
-    cookies.split("; ").forEach((c: string) => {
-      const [key] = c.split("=");
-      if (key) cookieMap.set(key, c);
-    });
-    
-    // Override with new cookies
-    loginCookies.forEach((c: string) => {
-      const cookiePart = c.split(";")[0];
-      const [key] = cookiePart.split("=");
-      if (key) cookieMap.set(key, cookiePart);
-    });
+    // Merge new cookies
+    const loginCookies = (loginRes.headers as any).getSetCookie?.() as string[] | undefined;
+    if (loginCookies) {
+      for (const c of loginCookies) {
+        const cookiePart = c.split(";")[0];
+        const eqIdx = cookiePart.indexOf("=");
+        if (eqIdx > 0) {
+          cookieMap.set(cookiePart.substring(0, eqIdx), cookiePart);
+        }
+      }
+    }
 
     const finalCookies = Array.from(cookieMap.values()).join("; ");
 
-    const loginData = await loginRes.json().catch(() => null);
-    if (!loginData || loginRes.status !== 200) {
-      console.error("Login failed:", loginRes.status, loginData);
+    if (loginRes.status !== 200) {
+      const errText = await loginRes.text();
+      console.error("Login failed:", loginRes.status, errText);
       return null;
     }
 
@@ -96,18 +127,16 @@ serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url);
-    const symbol = url.searchParams.get("symbol") || "BTCUSDT";
-    const resolution = url.searchParams.get("resolution") || "1";
-    const from = url.searchParams.get("from");
-    const to = url.searchParams.get("to");
-    const countback = url.searchParams.get("countback") || "300";
+    const body = await req.json();
+    const {
+      symbol = "BTCUSDT",
+      resolution = "1",
+      countback = 300,
+      broker_user,
+      broker_pass,
+    } = body;
 
-    // Get broker credentials from request
-    const brokerUser = url.searchParams.get("broker_user");
-    const brokerPass = url.searchParams.get("broker_pass");
-
-    if (!brokerUser || !brokerPass) {
+    if (!broker_user || !broker_pass) {
       return new Response(
         JSON.stringify({ error: "Missing broker credentials" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -115,7 +144,7 @@ serve(async (req) => {
     }
 
     // Get authenticated session
-    const cookies = await getUnicSession(brokerUser, brokerPass);
+    const cookies = await getUnicSession(broker_user, broker_pass);
     if (!cookies) {
       return new Response(
         JSON.stringify({ error: "Failed to authenticate with broker" }),
@@ -125,25 +154,26 @@ serve(async (req) => {
 
     // Fetch UDF data
     const now = Math.floor(Date.now() / 1000);
-    const udfUrl = `${UNIC_BASE}/publicapi/tradingview/udf-history?symbol=${symbol}&resolution=${resolution}&from=${from || (now - 300 * 60)}&to=${to || now}&countback=${countback}&site=unicbroker.com`;
+    const from = now - countback * 60;
+    const udfUrl = `${UNIC_BASE}/publicapi/tradingview/udf-history?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&countback=${countback}&site=unicbroker.com`;
 
     const udfRes = await fetch(udfUrl, {
       headers: {
         Cookie: cookies,
         Referer: `${UNIC_BASE}/traderoom`,
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "application/json",
       },
     });
 
     if (!udfRes.ok) {
-      // Invalidate cache on auth failure
       if (udfRes.status === 401) {
-        sessionCache.delete(brokerUser);
+        sessionCache.delete(broker_user);
       }
       const errText = await udfRes.text();
       console.error("UDF fetch failed:", udfRes.status, errText);
       return new Response(
-        JSON.stringify({ error: "Failed to fetch chart data", status: udfRes.status }),
+        JSON.stringify({ error: "Failed to fetch chart data" }),
         { status: udfRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

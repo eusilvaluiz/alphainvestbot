@@ -179,6 +179,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     setBrokerSession(null);
     alphaApi.logout();
+    localStorage.removeItem("broker_credentials");
   };
 
   const connectBroker = async (brokerUser: string, brokerPass: string) => {

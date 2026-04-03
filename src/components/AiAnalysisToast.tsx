@@ -28,13 +28,15 @@ const AiAnalysisToast = ({
   const mountedRef = useRef(true);
 
   const fetchAnalysis = useCallback(async () => {
-    if (!selectedSymbol || !currentPrice) return;
+    if (!selectedSymbol) return;
+
+    const price = currentPrice || parseFloat(selectedSymbol.last_price) || 0;
 
     try {
       const { data, error } = await supabase.functions.invoke("ai-analysis", {
         body: {
           symbol: selectedSymbol.code,
-          price: currentPrice,
+          price,
           variation: selectedSymbol.daily_percent_variation,
           payout: selectedSymbol.payout,
           isTrading,

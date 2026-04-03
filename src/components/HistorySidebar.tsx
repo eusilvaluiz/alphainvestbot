@@ -80,7 +80,7 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
         <div>
           <span className="text-muted-foreground">Entrada</span>
           <p className="text-foreground font-medium">
-            R${entry.entryPrice.toFixed(2)}
+            R${Number(entry.entryPrice).toFixed(2)}
           </p>
         </div>
         <div>
@@ -94,7 +94,7 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
             <>
               <span className="text-muted-foreground">Atual</span>
               <p className="text-primary font-medium">
-                R${entry.currentPrice.toFixed(2)}
+                R${Number(entry.currentPrice).toFixed(2)}
               </p>
             </>
           ) : (

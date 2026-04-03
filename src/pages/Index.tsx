@@ -25,7 +25,10 @@ const Index = () => {
       setSymbols(syms);
       const eth = syms.find((s) => s.code === "ETHUSDT");
       setSelectedSymbol(eth || syms[0] || null);
+      // Resume bot if it was running before refresh
+      bot.resumeBot(syms);
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleStart = (config: any) => {

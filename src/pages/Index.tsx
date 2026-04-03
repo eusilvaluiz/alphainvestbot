@@ -46,8 +46,8 @@ const Index = () => {
 
   const currentBalance = bot.isRunning
     ? bot.balance
-    : session
-    ? session.creditCents / 100
+    : brokerSession
+    ? brokerSession.creditCents / 100
     : 0;
 
   return (

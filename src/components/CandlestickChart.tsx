@@ -149,6 +149,39 @@ const parseRealtimeTick = (input: unknown): { closePrice: number; timestamp: num
   return null;
 };
 
+/* ── Category mapping ── */
+const CATEGORY_TABS = [
+  { key: "all", label: "Todos" },
+  { key: "crypto", label: "Crypto" },
+  { key: "forex", label: "Forex" },
+  { key: "stock", label: "Ações" },
+  { key: "commodity", label: "Commodities" },
+] as const;
+
+type CategoryKey = (typeof CATEGORY_TABS)[number]["key"];
+
+function guessCategory(s: ApiSymbol): CategoryKey {
+  const code = s.code.toUpperCase();
+  const name = s.name.toLowerCase();
+  // Crypto: ends with USDT or known crypto names
+  if (code.endsWith("USDT") || code.endsWith("BTC") || /bitcoin|ethereum|litecoin|ripple|cardano|solana|doge|bnb|tron|polkadot|avalanche|chainlink|polygon|shiba|uniswap|stellar/i.test(name)) return "crypto";
+  // Forex: typical currency pairs
+  if (/^(EUR|USD|GBP|JPY|AUD|NZD|CAD|CHF)(EUR|USD|GBP|JPY|AUD|NZD|CAD|CHF)$/i.test(code) || /forex|currency/i.test(s.type)) return "forex";
+  // Commodities
+  if (/gold|silver|oil|brent|crude|gas|platinum|palladium|copper|wheat|corn|coffee|sugar|cocoa|cotton|xau|xag|wti/i.test(name) || /xau|xag|wti|brent/i.test(code)) return "commodity";
+  // Stocks
+  if (/stock|share|equity|ação/i.test(s.type) || /apple|tesla|google|amazon|meta|microsoft|nvidia|netflix|ibm|disney|coca|nike|visa|mastercard|paypal|uber|airbnb|snap|twitter|intel|amd|qualcomm/i.test(name)) return "stock";
+  // Fallback based on type field
+  if (s.type) {
+    const t = s.type.toLowerCase();
+    if (t.includes("crypto") || t.includes("digital")) return "crypto";
+    if (t.includes("forex") || t.includes("currency")) return "forex";
+    if (t.includes("stock") || t.includes("equit")) return "stock";
+    if (t.includes("commod")) return "commodity";
+  }
+  return "crypto"; // default
+}
+
 /* ── Symbol Picker Modal ── */
 const SymbolPickerModal = ({
   symbols,
@@ -162,6 +195,7 @@ const SymbolPickerModal = ({
   onClose: () => void;
 }) => {
   const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<CategoryKey>("all");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -169,19 +203,42 @@ const SymbolPickerModal = ({
   }, []);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return symbols;
-    const q = search.toLowerCase();
-    return symbols.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        s.code.toLowerCase().includes(q)
-    );
-  }, [symbols, search]);
+    let list = symbols;
+    if (activeCategory !== "all") {
+      list = list.filter((s) => guessCategory(s) === activeCategory);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.code.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [symbols, search, activeCategory]);
 
   return (
-    <div className="absolute top-full left-0 mt-2 bg-card border border-border rounded-xl shadow-2xl z-50 w-72 overflow-hidden">
+    <div className="absolute top-full left-0 mt-2 bg-card border border-border rounded-xl shadow-2xl z-50 w-80 overflow-hidden">
+      {/* Category Tabs */}
+      <div className="flex items-center gap-1 px-2 pt-2 pb-1 overflow-x-auto scrollbar-none">
+        {CATEGORY_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveCategory(tab.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+              activeCategory === tab.key
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Search */}
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
         <Search size={16} className="text-muted-foreground shrink-0" />
         <input
           ref={inputRef}

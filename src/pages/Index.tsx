@@ -32,9 +32,18 @@ const Index = () => {
   useEffect(() => {
     alphaApi.getSymbols().then((syms) => {
       setSymbols(syms);
-      const eth = syms.find((s) => s.code === "ETHUSDT");
-      setSelectedSymbol(eth || syms[0] || null);
-      // Resume bot if it was running before refresh
+      // Check persisted bot state for the active symbol
+      const savedState = localStorage.getItem("alpha_bot_state");
+      let restoredSymbol: ApiSymbol | null = null;
+      if (savedState) {
+        try {
+          const parsed = JSON.parse(savedState);
+          if (parsed.symbolCode) {
+            restoredSymbol = syms.find((s) => s.code === parsed.symbolCode) || null;
+          }
+        } catch {}
+      }
+      setSelectedSymbol(restoredSymbol || syms.find((s) => s.code === "ETHUSDT") || syms[0] || null);
       bot.resumeBot(syms);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps

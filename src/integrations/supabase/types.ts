@@ -14,7 +14,165 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      bot_configs: {
+        Row: {
+          created_at: string
+          entry_value: number
+          id: string
+          is_active: boolean
+          model: string
+          name: string
+          position: number
+          stop_loss: number
+          stop_win: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entry_value?: number
+          id?: string
+          is_active?: boolean
+          model?: string
+          name?: string
+          position?: number
+          stop_loss?: number
+          stop_win?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entry_value?: number
+          id?: string
+          is_active?: boolean
+          model?: string
+          name?: string
+          position?: number
+          stop_loss?: number
+          stop_win?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      broker_credentials: {
+        Row: {
+          broker_token: string | null
+          broker_user: string
+          created_at: string
+          credit: string | null
+          credit_cents: number | null
+          id: string
+          updated_at: string
+          user_id: string
+          ws_token: string | null
+        }
+        Insert: {
+          broker_token?: string | null
+          broker_user: string
+          created_at?: string
+          credit?: string | null
+          credit_cents?: number | null
+          id?: string
+          updated_at?: string
+          user_id: string
+          ws_token?: string | null
+        }
+        Update: {
+          broker_token?: string | null
+          broker_user?: string
+          created_at?: string
+          credit?: string | null
+          credit_cents?: number | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+          ws_token?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          id: string
+          name: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          name?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trade_history: {
+        Row: {
+          amount: number
+          amount_formatted: string | null
+          created_at: string
+          direction: string
+          entry_price: number
+          expiration_seconds: number | null
+          expiration_timestamp: number | null
+          id: string
+          profit_loss: number | null
+          result_price: number | null
+          status: string
+          symbol: string
+          symbol_img: string | null
+          transaction_id: number | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          amount_formatted?: string | null
+          created_at?: string
+          direction: string
+          entry_price: number
+          expiration_seconds?: number | null
+          expiration_timestamp?: number | null
+          id?: string
+          profit_loss?: number | null
+          result_price?: number | null
+          status?: string
+          symbol: string
+          symbol_img?: string | null
+          transaction_id?: number | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          amount_formatted?: string | null
+          created_at?: string
+          direction?: string
+          entry_price?: number
+          expiration_seconds?: number | null
+          expiration_timestamp?: number | null
+          id?: string
+          profit_loss?: number | null
+          result_price?: number | null
+          status?: string
+          symbol?: string
+          symbol_img?: string | null
+          transaction_id?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

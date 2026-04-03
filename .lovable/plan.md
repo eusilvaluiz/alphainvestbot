@@ -1,32 +1,26 @@
-## Diferenças identificadas entre nosso app e o site referência
 
-### 1. Modal de Login
-- **Referência**: Título "Bem-vindo de Volta" com avatar verde "A", subtítulo "Entre na sua conta", link "Não tem uma conta? Cadastre-se"
-- **Nosso**: Título "ALPHA BOT", subtítulo "Entre na sua conta", sem link de cadastro
+# Backend Independente - Alpha Bot
 
-### 2. Header (logado)
-- **Referência**: Mostra "clodoaldo123 ≡" (nome + ícone hamburger menu)
-- **Nosso**: Mostra nome + ícone de logout separado
+## O que continua usando a Unic Broker (sua API)
+- ✅ Dados de mercado (symbols, historical-data)
+- ✅ Abertura de posições (open-position)
+- ✅ Settlement e saldo
+- ✅ Login na corretora (para obter token de trading)
 
-### 3. Sidebar (logado)
-- **Referência**: Mostra iniciais do usuário "CL" no bottom + ícone de sair
-- **Nosso**: Não mostra iniciais
+## O que terá backend próprio (Lovable Cloud)
+1. **Autenticação própria** — Cadastro/login de usuários com Supabase Auth (email/senha, Google, etc.)
+2. **Banco de dados** — Tabelas para:
+   - `profiles` — dados do usuário (nome, avatar, configurações)
+   - `broker_credentials` — token da Unic Broker vinculado ao usuário (criptografado)
+   - `trade_history` — histórico completo de operações persistido
+   - `bot_configs` — configurações salvas do bot por usuário
+3. **Edge Functions** — Para:
+   - Proxy seguro para a API da Unic Broker (tokens ficam no servidor, não no frontend)
+   - Lógica de análise de mercado server-side
+4. **RLS Policies** — Cada usuário só acessa seus próprios dados
 
-### 4. Área do gráfico
-- **Referência**: Não exibe candlestick chart visível, apenas preço grande e stats
-- **Nosso**: Exibe candlestick chart completo (podemos manter, é uma melhoria)
-
-### 5. Config Panel (logado)
-- **Referência**: Valor de entrada auto-calculado (5% do saldo = R$ 766), Stop Win e Stop Loss auto-calculados (10x e 5x o entry), botão "Start"
-- **Nosso**: Valores fixos (R$ 10, Stop Win 500, Stop Loss 100), botão "Login Necessário"/"Iniciar Bot"
-
-### 6. Stats bar
-- **Referência**: Labels sem valores quando não carregados
-- **Nosso**: Mostra $0.00
-
-### Plano de implementação:
-1. Atualizar LoginModal com novo design (avatar, título, link cadastro)
-2. Atualizar Header com menu hamburger quando logado
-3. Atualizar SidebarNav com iniciais do usuário
-4. Atualizar ConfigPanel para auto-calcular valores baseado no saldo
-5. Pequenos ajustes de estilo nos stats e layout
+## Benefícios
+- Usuários se cadastram direto no seu app
+- Histórico de trades persiste entre sessões
+- Credenciais da corretora ficam seguras no servidor
+- App funciona 100% independente como produto

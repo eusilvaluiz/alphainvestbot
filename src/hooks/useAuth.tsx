@@ -3,14 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { alphaApi, type UserSession } from "@/lib/api";
 import type { User, Session } from "@supabase/supabase-js";
 
-interface BrokerCredentials {
-  broker_user: string;
-  broker_token: string | null;
-  ws_token: string | null;
-  credit: string | null;
-  credit_cents: number;
-}
-
 interface AuthContextType {
   // Supabase auth
   user: User | null;
@@ -18,8 +10,8 @@ interface AuthContextType {
   isLoggedIn: boolean;
   loading: boolean;
   error: string | null;
-  signUp: (email: string, password: string, name?: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, username: string, name?: string) => Promise<void>;
+  signIn: (identifier: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   // Broker connection
   brokerSession: UserSession | null;
@@ -31,6 +23,13 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+const normalizeUsername = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -101,14 +100,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const signUp = async (email: string, password: string, name?: string) => {
+  const resolveLoginEmail = async (identifier: string) => {
+    const normalizedIdentifier = identifier.trim().toLowerCase();
+
+    if (!normalizedIdentifier) {
+      throw new Error("Informe seu usuário");
+    }
+
+    if (normalizedIdentifier.includes("@")) {
+      return normalizedIdentifier;
+    }
+
+    const { data, error } = await (supabase as any).rpc("get_profile_email_by_username", {
+      _username: normalizedIdentifier,
+    });
+
+    if (error) throw error;
+    if (!data) throw new Error("Usuário não encontrado");
+
+    return String(data).trim().toLowerCase();
+  };
+
+  const signUp = async (email: string, password: string, username: string, name?: string) => {
     setLoading(true);
     setError(null);
     try {
+      const normalizedUsername = normalizeUsername(username);
+
+      if (normalizedUsername.length < 3) {
+        throw new Error("O usuário deve ter pelo menos 3 caracteres");
+      }
+
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { name: name || email } },
+        options: {
+          data: {
+            name: name || normalizedUsername,
+            username: normalizedUsername,
+          },
+          emailRedirectTo: window.location.origin,
+        },
       });
       if (error) throw error;
     } catch (e: any) {
@@ -119,10 +151,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (identifier: string, password: string) => {
     setLoading(true);
     setError(null);
     try {
+      const email = await resolveLoginEmail(identifier);
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
     } catch (e: any) {

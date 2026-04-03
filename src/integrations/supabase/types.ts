@@ -96,26 +96,32 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          email: string | null
           id: string
           name: string | null
           updated_at: string
           user_id: string
+          username: string
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           name?: string | null
           updated_at?: string
           user_id: string
+          username: string
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           name?: string | null
           updated_at?: string
           user_id?: string
+          username?: string
         }
         Relationships: []
       }
@@ -178,7 +184,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_profile_email_by_username: {
+        Args: { _username: string }
+        Returns: string
+      }
+      normalize_username_value: {
+        Args: { input_username: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

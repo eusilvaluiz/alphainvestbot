@@ -126,7 +126,7 @@ const Index = () => {
         currentPrice={currentPrice}
         isTrading={bot.isRunning}
         lastTradeDirection={lastTradeDirection}
-        selectedModel="google/gemini-3-flash-preview"
+        selectedModel={selectedModel}
       />
     </div>
   );

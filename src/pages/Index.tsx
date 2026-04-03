@@ -58,7 +58,7 @@ const Index = () => {
                 wins={0}
                 losses={0}
               />
-              <ConfigPanel isLoggedIn={isLoggedIn} onStart={handleStart} />
+              <ConfigPanel isLoggedIn={isLoggedIn} balance={balance} onStart={handleStart} />
             </div>
           </div>
 

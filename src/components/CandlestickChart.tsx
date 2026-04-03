@@ -23,6 +23,14 @@ interface UdfData {
   v?: number[];
 }
 
+type ChartCandle = {
+  time: any;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
+
 // Client-side session cookie cache to avoid re-login on every poll
 let cachedSessionCookies: string | null = null;
 

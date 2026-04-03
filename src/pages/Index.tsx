@@ -110,6 +110,13 @@ const Index = () => {
 
       <HistoryDrawer entries={bot.trades} />
       <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
+      <AiAnalysisToast
+        selectedSymbol={selectedSymbol}
+        currentPrice={currentPrice}
+        isTrading={bot.isRunning}
+        lastTradeDirection={lastTradeDirection}
+        selectedModel="google/gemini-3-flash-preview"
+      />
     </div>
   );
 };

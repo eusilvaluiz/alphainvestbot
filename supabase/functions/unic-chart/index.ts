@@ -87,7 +87,7 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         Accept: "application/json",
       },
-      body: JSON.stringify({ login: brokerUser, password: brokerPass }),
+      body: JSON.stringify({ email: brokerUser, password: brokerPass }),
       redirect: "manual",
     });
 

@@ -107,6 +107,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
           };
           series.update(newCandle);
           setCurrentPrice(newCandle.close);
+          onPriceUpdate?.(newCandle.close);
         }
       } catch {}
     }, 5000);

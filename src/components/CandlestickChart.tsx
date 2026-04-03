@@ -7,6 +7,7 @@ interface CandlestickChartProps {
   selectedSymbol: ApiSymbol | null;
   symbols: ApiSymbol[];
   onSymbolChange: (symbol: ApiSymbol) => void;
+  onPriceUpdate?: (price: number) => void;
 }
 
 const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange }: CandlestickChartProps) => {

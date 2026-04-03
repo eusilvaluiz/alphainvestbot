@@ -18,30 +18,45 @@ const AiAnalysisToast = ({
   lastTradeDirection,
   selectedModel,
 }: AiAnalysisToastProps) => {
-  const [message, setMessage] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
   const [typing, setTyping] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastSymbolRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
+  const lastSymbolRef = useRef<string | null>(null);
+  const hasFiredInitial = useRef(false);
+
+  // Use refs for values that change often so fetchAnalysis doesn't re-create
+  const priceRef = useRef(currentPrice);
+  const isTradingRef = useRef(isTrading);
+  const directionRef = useRef(lastTradeDirection);
+  const symbolRef = useRef(selectedSymbol);
+  const modelRef = useRef(selectedModel);
+
+  useEffect(() => { priceRef.current = currentPrice; }, [currentPrice]);
+  useEffect(() => { isTradingRef.current = isTrading; }, [isTrading]);
+  useEffect(() => { directionRef.current = lastTradeDirection; }, [lastTradeDirection]);
+  useEffect(() => { symbolRef.current = selectedSymbol; }, [selectedSymbol]);
+  useEffect(() => { modelRef.current = selectedModel; }, [selectedModel]);
 
   const fetchAnalysis = useCallback(async () => {
-    if (!selectedSymbol) return;
+    const sym = symbolRef.current;
+    if (!sym) return;
 
-    const price = currentPrice || parseFloat(selectedSymbol.last_price) || 0;
+    const price = priceRef.current || parseFloat(sym.last_price) || 0;
+
+    console.log("[AI Analysis] Fetching for", sym.code, "price:", price);
 
     try {
       const { data, error } = await supabase.functions.invoke("ai-analysis", {
         body: {
-          symbol: selectedSymbol.code,
+          symbol: sym.code,
           price,
-          variation: selectedSymbol.daily_percent_variation,
-          payout: selectedSymbol.payout,
-          isTrading,
-          direction: lastTradeDirection || null,
-          model: selectedModel,
+          variation: sym.daily_percent_variation,
+          payout: sym.payout,
+          isTrading: isTradingRef.current,
+          direction: directionRef.current || null,
+          model: modelRef.current,
         },
       });
 
@@ -55,13 +70,13 @@ const AiAnalysisToast = ({
       const text = data?.analysis;
       if (!text) return;
 
-      setMessage(text);
+      console.log("[AI Analysis] Got:", text);
+
       setDismissed(false);
       setVisible(true);
       setIsTyping(true);
       setTyping("");
 
-      // Typing effect
       let i = 0;
       const typeInterval = setInterval(() => {
         if (!mountedRef.current) {
@@ -73,7 +88,6 @@ const AiAnalysisToast = ({
         if (i >= text.length) {
           clearInterval(typeInterval);
           setIsTyping(false);
-          // Auto-hide after 8 seconds
           setTimeout(() => {
             if (mountedRef.current) setVisible(false);
           }, 8000);
@@ -82,15 +96,23 @@ const AiAnalysisToast = ({
     } catch (err) {
       console.error("Failed to fetch AI analysis:", err);
     }
-  }, [selectedSymbol, currentPrice, isTrading, lastTradeDirection, selectedModel]);
+  }, []); // stable — reads from refs
 
-  // Trigger on symbol change
+  // Initial fetch + symbol change
   useEffect(() => {
     if (!selectedSymbol) return;
+
     if (lastSymbolRef.current !== selectedSymbol.code) {
       lastSymbolRef.current = selectedSymbol.code;
-      // Small delay so price has time to load
-      const t = setTimeout(() => fetchAnalysis(), 2000);
+      hasFiredInitial.current = true;
+      const t = setTimeout(() => fetchAnalysis(), 3000);
+      return () => clearTimeout(t);
+    }
+
+    // First mount with same symbol (shouldn't happen but safety)
+    if (!hasFiredInitial.current) {
+      hasFiredInitial.current = true;
+      const t = setTimeout(() => fetchAnalysis(), 3000);
       return () => clearTimeout(t);
     }
   }, [selectedSymbol, fetchAnalysis]);
@@ -99,25 +121,26 @@ const AiAnalysisToast = ({
   useEffect(() => {
     if (!selectedSymbol) return;
 
+    let timeoutId: ReturnType<typeof setTimeout>;
+
     const scheduleNext = () => {
-      const delay = 120000 + Math.random() * 60000; // 2-3 min
-      return setTimeout(() => {
+      const delay = 120000 + Math.random() * 60000;
+      timeoutId = setTimeout(() => {
         if (mountedRef.current) {
           fetchAnalysis();
-          intervalRef.current = scheduleNext() as any;
+          scheduleNext();
         }
       }, delay);
     };
 
-    const timeout = scheduleNext();
-    return () => clearTimeout(timeout);
+    scheduleNext();
+    return () => clearTimeout(timeoutId);
   }, [selectedSymbol, fetchAnalysis]);
 
-  // Trigger when bot starts/stops
+  // Trigger when bot starts
   const prevTradingRef = useRef(isTrading);
   useEffect(() => {
     if (isTrading && !prevTradingRef.current) {
-      // Bot just started
       setTimeout(() => fetchAnalysis(), 1500);
     }
     prevTradingRef.current = isTrading;
@@ -125,20 +148,16 @@ const AiAnalysisToast = ({
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
+    return () => { mountedRef.current = false; };
   }, []);
 
-  if (!visible || dismissed || !message) return null;
+  if (!visible || dismissed) return null;
 
   return (
     <div className="fixed bottom-4 left-16 z-50 max-w-sm animate-in slide-in-from-bottom-4 fade-in duration-500">
       <div className="relative bg-card/95 backdrop-blur-lg border border-primary/30 rounded-xl p-4 shadow-2xl shadow-primary/10">
-        {/* Glow effect */}
         <div className="absolute -inset-px rounded-xl bg-gradient-to-r from-primary/20 via-transparent to-accent/20 -z-10 blur-sm" />
 
-        {/* Header */}
         <div className="flex items-center gap-2 mb-2">
           <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-primary/20">
             <Brain className="w-3.5 h-3.5 text-primary" />
@@ -155,7 +174,6 @@ const AiAnalysisToast = ({
           </button>
         </div>
 
-        {/* Message */}
         <p className="text-sm text-foreground leading-relaxed">
           {typing}
           {isTyping && (

@@ -219,7 +219,7 @@ const SymbolPickerModal = ({
   }, [symbols, search, activeCategory]);
 
   return (
-    <div className="absolute top-full left-0 mt-2 bg-card border border-border rounded-xl shadow-2xl z-50 w-80 overflow-hidden">
+    <div className="absolute top-full left-0 mt-2 bg-card border border-border rounded-xl shadow-2xl z-50 w-96 overflow-hidden">
       {/* Category Tabs */}
       <div className="flex items-center gap-1 px-2 pt-2 pb-1 overflow-x-auto scrollbar-none">
         {CATEGORY_TABS.map((tab) => (

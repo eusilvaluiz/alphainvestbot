@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import SidebarNav from "@/components/SidebarNav";
 import Header from "@/components/Header";
@@ -7,30 +7,31 @@ import ControlPanel from "@/components/ControlPanel";
 import ConfigPanel from "@/components/ConfigPanel";
 import HistorySidebar from "@/components/HistorySidebar";
 import LoginModal from "@/components/LoginModal";
+import { useAuth } from "@/hooks/useAuth";
+import { alphaApi, type Symbol as ApiSymbol } from "@/lib/api";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [loginOpen, setLoginOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [username, setUsername] = useState("");
+  const { session, isLoggedIn } = useAuth();
+  const [symbols, setSymbols] = useState<ApiSymbol[]>([]);
+  const [selectedSymbol, setSelectedSymbol] = useState<ApiSymbol | null>(null);
 
-  const handleLogin = async (user: string, pass: string) => {
-    // Placeholder - will integrate with real auth later
-    if (user && pass) {
-      setIsLoggedIn(true);
-      setUsername(user);
-      setLoginOpen(false);
-      toast.success(`Bem-vindo, ${user}!`);
-    } else {
-      toast.error("Credenciais inválidas");
-    }
-  };
+  useEffect(() => {
+    alphaApi.getSymbols().then((syms) => {
+      setSymbols(syms);
+      const eth = syms.find((s) => s.code === "ETHUSDT");
+      setSelectedSymbol(eth || syms[0] || null);
+    });
+  }, []);
 
   const handleStart = (config: any) => {
     toast.info("Bot iniciado com sucesso!", {
       description: `Modelo: ${config.model} | Entrada: R$ ${config.entryValue}`,
     });
   };
+
+  const balance = session ? session.creditCents / 100 : 0;
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -40,13 +41,16 @@ const Index = () => {
         <Header onLoginClick={() => setLoginOpen(true)} />
 
         <div className="flex-1 flex">
-          {/* Main Content */}
           <div className="flex-1 p-4 space-y-4 overflow-y-auto">
-            <CandlestickChart />
+            <CandlestickChart
+              selectedSymbol={selectedSymbol}
+              symbols={symbols}
+              onSymbolChange={setSelectedSymbol}
+            />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <ControlPanel
-                balance={0}
+                balance={balance}
                 status="Parado"
                 profitLoss={0}
                 winRate={0}
@@ -58,14 +62,13 @@ const Index = () => {
             </div>
           </div>
 
-          {/* History Sidebar */}
           <div className="w-72 border-l border-border p-4 hidden xl:block">
             <HistorySidebar entries={[]} />
           </div>
         </div>
       </div>
 
-      <LoginModal open={loginOpen} onOpenChange={setLoginOpen} onLogin={handleLogin} />
+      <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
     </div>
   );
 };

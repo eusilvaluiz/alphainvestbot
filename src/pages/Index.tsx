@@ -77,7 +77,7 @@ const Index = () => {
                 losses={bot.losses}
               />
               <ConfigPanel
-                isLoggedIn={isLoggedIn}
+                isLoggedIn={isBrokerConnected}
                 balance={currentBalance}
                 isRunning={bot.isRunning}
                 isProcessing={bot.isProcessing}

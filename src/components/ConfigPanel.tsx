@@ -7,6 +7,8 @@ type AiModel = "grok" | "claude" | "gpt";
 interface ConfigPanelProps {
   isLoggedIn: boolean;
   balance: number;
+  isRunning: boolean;
+  isProcessing: boolean;
   onStart: (config: {
     entryValue: number;
     position: number;
@@ -14,9 +16,17 @@ interface ConfigPanelProps {
     stopLoss: number;
     model: AiModel;
   }) => void;
+  onStop: () => void;
 }
 
-const ConfigPanel = ({ isLoggedIn, balance, onStart }: ConfigPanelProps) => {
+const ConfigPanel = ({
+  isLoggedIn,
+  balance,
+  isRunning,
+  isProcessing,
+  onStart,
+  onStop,
+}: ConfigPanelProps) => {
   const [entryValue, setEntryValue] = useState("10");
   const [position, setPosition] = useState("3");
   const [stopWin, setStopWin] = useState("500");
@@ -25,13 +35,13 @@ const ConfigPanel = ({ isLoggedIn, balance, onStart }: ConfigPanelProps) => {
 
   // Auto-calculate based on balance when logged in
   useEffect(() => {
-    if (isLoggedIn && balance > 0) {
+    if (isLoggedIn && balance > 0 && !isRunning) {
       const entry = Math.round(balance * 0.05);
       setEntryValue(String(entry));
       setStopWin(String(entry * 10));
       setStopLoss(String(entry * 5));
     }
-  }, [isLoggedIn, balance]);
+  }, [isLoggedIn, balance, isRunning]);
 
   const models: { id: AiModel; label: string }[] = [
     { id: "grok", label: "Grok 4.1" },
@@ -58,14 +68,19 @@ const ConfigPanel = ({ isLoggedIn, balance, onStart }: ConfigPanelProps) => {
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-muted-foreground mb-1.5 block">Valor de Entrada</label>
+            <label className="text-xs text-muted-foreground mb-1.5 block">
+              Valor de Entrada
+            </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">R$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                R$
+              </span>
               <Input
                 type="number"
                 value={entryValue}
                 onChange={(e) => setEntryValue(e.target.value)}
                 className="pl-9 bg-secondary border-border text-foreground"
+                disabled={isRunning}
               />
             </div>
           </div>
@@ -79,32 +94,43 @@ const ConfigPanel = ({ isLoggedIn, balance, onStart }: ConfigPanelProps) => {
               value={position}
               onChange={(e) => setPosition(e.target.value)}
               className="bg-secondary border-border text-foreground"
+              disabled={isRunning}
             />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-muted-foreground mb-1.5 block">Stop Win</label>
+            <label className="text-xs text-muted-foreground mb-1.5 block">
+              Stop Win
+            </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">R$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                R$
+              </span>
               <Input
                 type="number"
                 value={stopWin}
                 onChange={(e) => setStopWin(e.target.value)}
                 className="pl-9 bg-secondary border-border text-foreground"
+                disabled={isRunning}
               />
             </div>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1.5 block">Stop Loss</label>
+            <label className="text-xs text-muted-foreground mb-1.5 block">
+              Stop Loss
+            </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">R$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                R$
+              </span>
               <Input
                 type="number"
                 value={stopLoss}
                 onChange={(e) => setStopLoss(e.target.value)}
                 className="pl-9 bg-secondary border-border text-foreground text-chart-red"
+                disabled={isRunning}
               />
             </div>
           </div>
@@ -118,20 +144,32 @@ const ConfigPanel = ({ isLoggedIn, balance, onStart }: ConfigPanelProps) => {
               size="sm"
               className="text-xs"
               onClick={() => setSelectedModel(model.id)}
+              disabled={isRunning}
             >
               {model.label}
             </Button>
           ))}
         </div>
 
-        <Button
-          variant="trading"
-          className="w-full"
-          onClick={handleStart}
-          disabled={!isLoggedIn}
-        >
-          {isLoggedIn ? "Start" : "Login Necessário"}
-        </Button>
+        {isRunning ? (
+          <Button
+            variant="destructive"
+            className="w-full"
+            onClick={onStop}
+            disabled={isProcessing}
+          >
+            {isProcessing ? "Processando..." : "Stop"}
+          </Button>
+        ) : (
+          <Button
+            variant="trading"
+            className="w-full"
+            onClick={handleStart}
+            disabled={!isLoggedIn}
+          >
+            {isLoggedIn ? "Start" : "Login Necessário"}
+          </Button>
+        )}
       </div>
     </div>
   );

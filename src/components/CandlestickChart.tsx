@@ -7,9 +7,10 @@ interface CandlestickChartProps {
   selectedSymbol: ApiSymbol | null;
   symbols: ApiSymbol[];
   onSymbolChange: (symbol: ApiSymbol) => void;
+  onPriceUpdate?: (price: number) => void;
 }
 
-const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange }: CandlestickChartProps) => {
+const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpdate }: CandlestickChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [currentPrice, setCurrentPrice] = useState(0);
@@ -76,6 +77,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange }: Candlesti
 
       const last = chartData[chartData.length - 1];
       setCurrentPrice(last.close);
+      onPriceUpdate?.(last.close);
       setStats({
         open: chartData[0].open,
         high: Math.max(...chartData.map((d) => d.high)),
@@ -105,6 +107,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange }: Candlesti
           };
           series.update(newCandle);
           setCurrentPrice(newCandle.close);
+          onPriceUpdate?.(newCandle.close);
         }
       } catch {}
     }, 5000);

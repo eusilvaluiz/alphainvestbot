@@ -17,7 +17,6 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
   }
 
   try {
-    // Step 1: Get CSRF token from login page
     const initRes = await fetch(`${UNIC_BASE}/login`, {
       method: "GET",
       headers: {
@@ -46,65 +45,27 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
     }
     const xsrfValue = xsrfCookie.split("=").slice(1).join("=");
     const xsrfToken = decodeURIComponent(xsrfValue);
-
     const cookies = Array.from(cookieMap.values()).join("; ");
 
-    // Step 2: Login - try with 'login' field instead of 'email'
+    // Login with correct field names: user + pass (not email + password)
     const loginRes = await fetch(`${UNIC_BASE}/publicapi/auth/login/web`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-XSRF-TOKEN": xsrfToken,
+        "X-Requested-With": "XMLHttpRequest",
         Cookie: cookies,
         Referer: `${UNIC_BASE}/login`,
         Origin: UNIC_BASE,
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         Accept: "application/json",
       },
-      body: JSON.stringify({ login: brokerUser, password: brokerPass }),
+      body: JSON.stringify({ user: brokerUser, pass: brokerPass }),
       redirect: "manual",
     });
 
     const loginBody = await loginRes.text();
-    console.log("Login attempt with 'login' field:", loginRes.status, loginBody.substring(0, 300));
-
-    // If 'login' field didn't work, try 'email'
-    if (loginBody.includes("error") || loginBody.includes("não conferem")) {
-      const loginRes2 = await fetch(`${UNIC_BASE}/publicapi/auth/login/web`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-XSRF-TOKEN": xsrfToken,
-          Cookie: cookies,
-          Referer: `${UNIC_BASE}/login`,
-          Origin: UNIC_BASE,
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ email: brokerUser, password: brokerPass }),
-        redirect: "manual",
-      });
-      const loginBody2 = await loginRes2.text();
-      console.log("Login attempt with 'email' field:", loginRes2.status, loginBody2.substring(0, 300));
-
-      // Try 'user' field
-      const loginRes3 = await fetch(`${UNIC_BASE}/publicapi/auth/login/web`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-XSRF-TOKEN": xsrfToken,
-          Cookie: cookies,
-          Referer: `${UNIC_BASE}/login`,
-          Origin: UNIC_BASE,
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ user: brokerUser, password: brokerPass }),
-        redirect: "manual",
-      });
-      const loginBody3 = await loginRes3.text();
-      console.log("Login attempt with 'user' field:", loginRes3.status, loginBody3.substring(0, 300));
-    }
+    console.log("Login response:", loginRes.status, loginBody.substring(0, 200));
 
     // Merge login cookies
     const loginCookies = (loginRes.headers as any).getSetCookie?.() as string[] | undefined;
@@ -120,11 +81,8 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
 
     const finalCookies = Array.from(cookieMap.values()).join("; ");
 
-    if (loginRes.status !== 200 && loginRes.status !== 302) {
-      return null;
-    }
-
-    if (loginBody.includes("error")) {
+    if (loginBody.includes('"error"') || loginBody.includes("não conferem")) {
+      console.error("Login failed:", loginBody.substring(0, 200));
       return null;
     }
 

@@ -120,12 +120,20 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
         </div>
         <div>
           {isOpen ? (
-            <>
-              <span className="text-muted-foreground">Atual</span>
-              <p className="text-primary font-medium">
-                R${Number(entry.currentPrice).toFixed(2)}
-              </p>
-            </>
+             <>
+               <span className="text-muted-foreground">Atual</span>
+               <p
+                 className={`font-medium ${
+                   liveWinning
+                     ? "text-chart-green"
+                     : liveTied
+                     ? "text-primary"
+                     : "text-chart-red"
+                 }`}
+               >
+                 R${Number(entry.currentPrice).toFixed(2)}
+               </p>
+             </>
           ) : (
             <>
               <span className="text-muted-foreground">Resultado</span>

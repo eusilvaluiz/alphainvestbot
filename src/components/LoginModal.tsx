@@ -10,6 +10,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { X } from "lucide-react";
 import { toast } from "sonner";
+import logoImg from "@/assets/alphabot.png";
 
 interface LoginModalProps {
   open: boolean;

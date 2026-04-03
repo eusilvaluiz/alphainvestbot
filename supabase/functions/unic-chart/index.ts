@@ -73,6 +73,9 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
     const xsrfToken = decodeURIComponent(xsrfValue);
 
     // Step 2: Login
+    console.log("Cookies before login:", cookies);
+    console.log("XSRF token:", xsrfToken.substring(0, 30) + "...");
+
     const loginRes = await fetch(`${UNIC_BASE}/publicapi/auth/login/web`, {
       method: "POST",
       headers: {
@@ -85,11 +88,23 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
         Accept: "application/json",
       },
       body: JSON.stringify({ login: brokerUser, password: brokerPass }),
-      redirect: "follow",
+      redirect: "manual",
     });
+
+    console.log("Login response status:", loginRes.status);
+    const loginBody = await loginRes.text();
+    console.log("Login response body:", loginBody.substring(0, 300));
+
+    // Collect ALL response headers
+    for (const [key, val] of loginRes.headers.entries()) {
+      if (key.toLowerCase() === "set-cookie") {
+        console.log("Login set-cookie:", val.substring(0, 80));
+      }
+    }
 
     // Merge new cookies
     const loginCookies = (loginRes.headers as any).getSetCookie?.() as string[] | undefined;
+    console.log("Login getSetCookie count:", loginCookies?.length || 0);
     if (loginCookies) {
       for (const c of loginCookies) {
         const cookiePart = c.split(";")[0];
@@ -101,10 +116,10 @@ async function getUnicSession(brokerUser: string, brokerPass: string): Promise<s
     }
 
     const finalCookies = Array.from(cookieMap.values()).join("; ");
+    console.log("Final cookies:", finalCookies.substring(0, 200));
 
-    if (loginRes.status !== 200) {
-      const errText = await loginRes.text();
-      console.error("Login failed:", loginRes.status, errText);
+    if (loginRes.status !== 200 && loginRes.status !== 302) {
+      console.error("Login failed:", loginRes.status);
       return null;
     }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createChart, CandlestickSeries, type IChartApi, type ISeriesApi, ColorType } from "lightweight-charts";
+import { createChart, type IChartApi, type ISeriesApi, ColorType } from "lightweight-charts";
 import { ChevronDown } from "lucide-react";
 
 const generateCandleData = () => {

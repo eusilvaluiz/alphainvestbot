@@ -47,8 +47,16 @@ const AiAnalysisToast = ({
     console.log("[AI Analysis] Fetching for", sym.code, "price:", price);
 
     try {
-      const { data, error } = await supabase.functions.invoke("ai-analysis", {
-        body: {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/ai-analysis`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({
           symbol: sym.code,
           price,
           variation: sym.daily_percent_variation,
@@ -56,16 +64,17 @@ const AiAnalysisToast = ({
           isTrading: isTradingRef.current,
           direction: directionRef.current || null,
           model: modelRef.current,
-        },
+        }),
       });
 
-      if (error) {
-        console.error("AI analysis error:", error);
+      if (!resp.ok) {
+        console.error("AI analysis error:", resp.status);
         return;
       }
 
       if (!mountedRef.current) return;
 
+      const data = await resp.json();
       const text = data?.analysis;
       if (!text) return;
 

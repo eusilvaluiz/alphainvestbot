@@ -60,7 +60,7 @@ Gere UMA análise curta sobre o momento atual deste ativo.`;
             { role: "system", content: systemPrompt },
             { role: "user", content: userContext },
           ],
-          max_tokens: 100,
+          ...(aiModel.startsWith("openai/") ? { max_completion_tokens: 100 } : { max_tokens: 100 }),
           temperature: 0.9,
         }),
       }

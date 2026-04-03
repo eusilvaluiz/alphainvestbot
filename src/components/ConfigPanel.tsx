@@ -62,6 +62,7 @@ const ConfigPanel = ({
         setStopWin(String(data.stop_win));
         setStopLoss(String(data.stop_loss));
         setSelectedModel(data.model as AiModel);
+        onModelChange?.(data.model as AiModel);
       } else if (isLoggedIn && balance > 0) {
         const entry = Math.round(balance * 0.05);
         setEntryValue(String(entry));

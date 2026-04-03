@@ -10,7 +10,7 @@ interface CandlestickChartProps {
   onPriceUpdate?: (price: number) => void;
 }
 
-const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange }: CandlestickChartProps) => {
+const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpdate }: CandlestickChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [currentPrice, setCurrentPrice] = useState(0);

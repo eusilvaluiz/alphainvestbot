@@ -7,6 +7,7 @@ import ControlPanel from "@/components/ControlPanel";
 import ConfigPanel from "@/components/ConfigPanel";
 import HistorySidebar, { HistoryDrawer } from "@/components/HistorySidebar";
 import LoginModal from "@/components/LoginModal";
+import AiAnalysisToast from "@/components/AiAnalysisToast";
 import { useAuth } from "@/hooks/useAuth";
 import { useTradingBot } from "@/hooks/useTradingBot";
 import { alphaApi, type Symbol as ApiSymbol } from "@/lib/api";
@@ -14,11 +15,19 @@ import { alphaApi, type Symbol as ApiSymbol } from "@/lib/api";
 const Index = () => {
   const [activeTab, setActiveTab] = useState("terminal");
   const [loginOpen, setLoginOpen] = useState(false);
+  const [currentPrice, setCurrentPrice] = useState(0);
   const { isLoggedIn, isBrokerConnected, brokerSession } = useAuth();
   const [symbols, setSymbols] = useState<ApiSymbol[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<ApiSymbol | null>(null);
 
   const bot = useTradingBot();
+
+  const handlePriceUpdate = (price: number) => {
+    setCurrentPrice(price);
+    bot.updateCurrentPrice(price);
+  };
+
+  const lastTradeDirection = bot.trades.length > 0 ? bot.trades[0].direction : null;
 
   useEffect(() => {
     alphaApi.getSymbols().then((syms) => {
@@ -66,7 +75,7 @@ const Index = () => {
               selectedSymbol={selectedSymbol}
               symbols={symbols}
               onSymbolChange={setSelectedSymbol}
-              onPriceUpdate={bot.updateCurrentPrice}
+              onPriceUpdate={handlePriceUpdate}
               activeTrades={bot.trades}
             />
 
@@ -101,6 +110,13 @@ const Index = () => {
 
       <HistoryDrawer entries={bot.trades} />
       <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
+      <AiAnalysisToast
+        selectedSymbol={selectedSymbol}
+        currentPrice={currentPrice}
+        isTrading={bot.isRunning}
+        lastTradeDirection={lastTradeDirection}
+        selectedModel="google/gemini-3-flash-preview"
+      />
     </div>
   );
 };

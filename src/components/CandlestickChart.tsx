@@ -331,7 +331,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       if (!isBrokerConnected) return;
 
       syncInterval = window.setInterval(() => {
-        void syncFromUnic(false, "poll");
+        void syncFromUnic();
       }, HISTORICAL_SYNC_INTERVAL_MS);
     };
 

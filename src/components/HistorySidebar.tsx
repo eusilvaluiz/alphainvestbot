@@ -34,6 +34,14 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
   const isWin = entry.status === "win";
   const isLoss = entry.status === "loss";
 
+  // Real-time win/loss indicator while trade is open
+  const liveWinning = isOpen
+    ? entry.direction === "up"
+      ? entry.currentPrice > entry.entryPrice
+      : entry.currentPrice < entry.entryPrice
+    : false;
+  const liveTied = isOpen && entry.currentPrice === entry.entryPrice;
+
   return (
     <div
       className={`rounded-lg border p-3 mb-2 ${
@@ -41,6 +49,12 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
           ? "border-chart-green/30 bg-chart-green/5"
           : isLoss
           ? "border-chart-red/30 bg-chart-red/5"
+          : isOpen
+          ? liveWinning
+            ? "border-chart-green/20 bg-chart-green/5"
+            : liveTied
+            ? "border-border bg-secondary"
+            : "border-chart-red/20 bg-chart-red/5"
           : "border-border bg-secondary"
       }`}
     >
@@ -64,7 +78,20 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
           </span>
         </div>
         {isOpen && (
-          <span className="text-xs font-mono text-primary">{timeLeft}</span>
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                liveWinning
+                  ? "bg-chart-green/20 text-chart-green"
+                  : liveTied
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-chart-red/20 text-chart-red"
+              }`}
+            >
+              {liveWinning ? "WIN" : liveTied ? "—" : "LOSS"}
+            </span>
+            <span className="text-xs font-mono text-primary">{timeLeft}</span>
+          </div>
         )}
         {isWin && (
           <span className="text-xs font-semibold px-2 py-0.5 rounded bg-chart-green/20 text-chart-green">
@@ -93,12 +120,20 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
         </div>
         <div>
           {isOpen ? (
-            <>
-              <span className="text-muted-foreground">Atual</span>
-              <p className="text-primary font-medium">
-                R${Number(entry.currentPrice).toFixed(2)}
-              </p>
-            </>
+             <>
+               <span className="text-muted-foreground">Atual</span>
+               <p
+                 className={`font-medium ${
+                   liveWinning
+                     ? "text-chart-green"
+                     : liveTied
+                     ? "text-primary"
+                     : "text-chart-red"
+                 }`}
+               >
+                 R${Number(entry.currentPrice).toFixed(2)}
+               </p>
+             </>
           ) : (
             <>
               <span className="text-muted-foreground">Resultado</span>

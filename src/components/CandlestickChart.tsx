@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react";
 import { alphaApi, type Symbol as ApiSymbol, type CandleData } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import type { TradeEntry } from "@/hooks/useTradingBot";
+import { useAuth } from "@/hooks/useAuth";
 import * as Ably from "ably";
 
 interface CandlestickChartProps {
@@ -91,8 +92,53 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | null> {
 }
 
 const BRAND_URL = "unicbroker.com";
+const HISTORICAL_SYNC_INTERVAL_MS = 1000;
+
+const parseNumber = (value: unknown) => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const parseJsonSafely = (value: unknown) => {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
+
+const toUnixSeconds = (value: number) => (value > 1_000_000_000_000 ? Math.floor(value / 1000) : Math.floor(value));
+
+const parseRealtimeTick = (input: unknown): { closePrice: number; timestamp: number } | null => {
+  const parsed = parseJsonSafely(input);
+
+  if (!parsed || typeof parsed !== "object") return null;
+
+  const record = parsed as Record<string, unknown>;
+  const closePrice = parseNumber(record.close ?? record.c ?? record.price ?? record.last_price ?? record.value);
+  const timestamp = parseNumber(record.time ?? record.t ?? record.timestamp ?? record.ts ?? record.updated_at);
+
+  if (closePrice !== null && timestamp !== null) {
+    return { closePrice, timestamp: toUnixSeconds(timestamp) };
+  }
+
+  for (const key of ["data", "payload", "tick", "message"]) {
+    if (record[key] !== undefined) {
+      const nested = parseRealtimeTick(record[key]);
+      if (nested) return nested;
+    }
+  }
+
+  return null;
+};
 
 const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpdate, activeTrades = [] }: CandlestickChartProps) => {
+  const { isBrokerConnected } = useAuth();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -156,11 +202,13 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       chartRef.current = null;
     }
 
-    // Cleanup previous Ably
     if (ablyClientRef.current) {
       ablyClientRef.current.close();
       ablyClientRef.current = null;
     }
+
+    let isDisposed = false;
+    let syncInterval: number | null = null;
 
     lastCandleRef.current = null;
     entryLinesRef.current.clear();
@@ -203,14 +251,32 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     chartRef.current = chart;
     seriesRef.current = series;
 
+    const applyHistoricalData = (candles: ChartCandle[], fitContent = false) => {
+      if (isDisposed || candles.length === 0) return;
+
+      series.setData(candles as any);
+      if (fitContent) {
+        chart.timeScale().fitContent();
+      }
+
+      const last = candles[candles.length - 1];
+      lastCandleRef.current = last;
+      setCurrentPrice(last.close);
+      onPriceUpdate?.(last.close);
+      setStats({
+        open: candles[0].open,
+        high: Math.max(...candles.map((d) => d.high)),
+        low: Math.min(...candles.map((d) => d.low)),
+      });
+    };
+
     // Apply tick to current candle (same logic as traderoom)
     const applyTick = (closePrice: number, timestamp: number) => {
-      const candleTime = Math.floor(timestamp / 60) * 60; // align to 1-min candle
+      const candleTime = Math.floor(timestamp / 60) * 60;
       const last = lastCandleRef.current;
 
       let candle: ChartCandle;
       if (!last || last.time !== candleTime) {
-        // New candle
         candle = {
           time: candleTime,
           open: last ? last.close : closePrice,
@@ -219,7 +285,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
           close: closePrice,
         };
       } else {
-        // Update existing candle
         candle = {
           time: last.time,
           open: last.open,
@@ -235,54 +300,57 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       onPriceUpdate?.(closePrice);
     };
 
+    const syncFromUnic = async (fitContent = false) => {
+      if (!isBrokerConnected) return false;
+
+      const unicData = await fetchUnicCandles(selectedSymbol.code, 300);
+      if (!unicData || unicData.length === 0 || isDisposed) return false;
+
+      setDataSource("unic");
+      applyHistoricalData(unicData, fitContent);
+      return true;
+    };
+
     // Load initial historical data
     const loadInitialData = async () => {
-      const unicData = await fetchUnicCandles(selectedSymbol.code, 300);
-      if (unicData && unicData.length > 0) {
-        setDataSource("unic");
-        series.setData(unicData as any);
-        chart.timeScale().fitContent();
+      const loadedFromUnic = await syncFromUnic(true);
+      if (loadedFromUnic) return;
 
-        const last = unicData[unicData.length - 1];
-        lastCandleRef.current = last;
-        setCurrentPrice(last.close);
-        onPriceUpdate?.(last.close);
-        setStats({
-          open: unicData[0].open,
-          high: Math.max(...unicData.map((d) => d.high)),
-          low: Math.min(...unicData.map((d) => d.low)),
-        });
-      } else {
-        setDataSource("alpha");
-        const candles = await alphaApi.getHistoricalData(selectedSymbol.code);
-        const chartData = candles.map((c: CandleData) => ({
-          time: c.open_time as any,
-          open: parseFloat(c.open),
-          high: parseFloat(c.higher),
-          low: parseFloat(c.lower),
-          close: parseFloat(c.close),
-        }));
-        if (chartData.length > 0) {
-          series.setData(chartData as any);
-          chart.timeScale().fitContent();
-          const last = chartData[chartData.length - 1];
-          lastCandleRef.current = last;
-          setCurrentPrice(last.close);
-          onPriceUpdate?.(last.close);
-          setStats({
-            open: chartData[0].open,
-            high: Math.max(...chartData.map((d) => d.high)),
-            low: Math.min(...chartData.map((d) => d.low)),
-          });
-        }
+      setDataSource("alpha");
+      const candles = await alphaApi.getHistoricalData(selectedSymbol.code);
+      if (isDisposed) return;
+
+      const chartData = candles.map((c: CandleData) => ({
+        time: c.open_time as any,
+        open: parseFloat(c.open),
+        high: parseFloat(c.higher),
+        low: parseFloat(c.lower),
+        close: parseFloat(c.close),
+      }));
+
+      if (chartData.length > 0) {
+        applyHistoricalData(chartData, true);
       }
+    };
+
+    const startHistoricalSync = () => {
+      if (!isBrokerConnected) return;
+
+      syncInterval = window.setInterval(() => {
+        void syncFromUnic(false);
+      }, HISTORICAL_SYNC_INTERVAL_MS);
     };
 
     // Connect to Ably for realtime ticks
     const connectAbly = async () => {
+      if (!isBrokerConnected) {
+        setRealtimeStatus("disconnected");
+        return;
+      }
+
       setRealtimeStatus("connecting");
       const tokenDetails = await fetchAblyToken();
-      if (!tokenDetails) {
+      if (!tokenDetails || isDisposed) {
         setRealtimeStatus("disconnected");
         return;
       }
@@ -304,41 +372,25 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
 
       client.connection.on("connected", () => {
-        console.log("[WSAB] ✅ Conectado ao realtime");
         setRealtimeStatus("connected");
       });
 
       client.connection.on("disconnected", () => {
-        console.warn("[WSAB] ⚠️ Desconectado");
         setRealtimeStatus("disconnected");
       });
 
       client.connection.on("failed", () => {
-        console.error("[WSAB] ❌ Falha na conexão");
         setRealtimeStatus("disconnected");
       });
 
-      // Subscribe to symbol channel with brand filter (same as traderoom)
       const derivedChannel = client.channels.getDerived(selectedSymbol.code, {
         filter: ` (headers.esiq == \`0\` && headers.isiq == \`0\`) || (!contains(headers.esi, '"${BRAND_URL}"') && headers.esiq > \`0\`) || (contains(headers.isi, '"${BRAND_URL}"')) `,
       });
 
       derivedChannel.subscribe((message: Ably.Message) => {
-        try {
-          const data = JSON.parse(message.data as string);
-          const headers = (message as any).extras?.headers || {};
-          const isi = JSON.parse(headers.isi || "[]");
-
-          // Same logic as traderoom: if ISI includes brand, allow; block public during prevention window
-          if (isi.includes(BRAND_URL)) {
-            // This is a manipulated tick for our brand — always apply
-          }
-
-          if (data.close !== undefined && data.time !== undefined) {
-            applyTick(parseFloat(data.close), parseInt(data.time));
-          }
-        } catch (err) {
-          console.warn("[WSAB] Parse error:", err);
+        const tick = parseRealtimeTick(message.data);
+        if (tick) {
+          applyTick(tick.closePrice, tick.timestamp);
         }
       });
 
@@ -346,6 +398,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     };
 
     void loadInitialData();
+    startHistoricalSync();
     void connectAbly();
 
     const handleResize = () => {
@@ -356,7 +409,11 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     window.addEventListener("resize", handleResize);
 
     return () => {
+      isDisposed = true;
       window.removeEventListener("resize", handleResize);
+      if (syncInterval !== null) {
+        window.clearInterval(syncInterval);
+      }
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -367,7 +424,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         ablyClientRef.current = null;
       }
     };
-  }, [selectedSymbol?.code]);
+  }, [selectedSymbol?.code, isBrokerConnected]);
 
   const payout = selectedSymbol ? `${Math.round((selectedSymbol.payout - 1) * 100)}%` : "85%";
 
@@ -378,7 +435,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
   };
 
   const statusColor = realtimeStatus === "connected" ? "bg-chart-green" : realtimeStatus === "connecting" ? "bg-yellow-500" : "bg-chart-red";
-  const statusLabel = realtimeStatus === "connected" ? "Live" : realtimeStatus === "connecting" ? "Conectando..." : "Offline";
+  const statusLabel = realtimeStatus === "connected" ? "Live" : realtimeStatus === "connecting" ? "Conectando..." : dataSource === "unic" ? "Sync" : "Offline";
 
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden">

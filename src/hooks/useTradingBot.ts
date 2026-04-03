@@ -119,7 +119,7 @@ export const useTradingBot = () => {
 
   const executeTradeCycle = useCallback(
     async (config: BotConfig, symbol: ApiSymbol) => {
-      if (!botRef.current.running || !session) return;
+      if (!botRef.current.running || !brokerSession) return;
 
       setIsProcessing(true);
       setStatus("Ativo");
@@ -251,12 +251,12 @@ export const useTradingBot = () => {
         }
       }
     },
-    [session, analyzeMarket, waitForExpiration, stopBot, profitLoss]
+    [brokerSession, analyzeMarket, waitForExpiration, stopBot, profitLoss]
   );
 
   const startBot = useCallback(
     (config: BotConfig, symbol: ApiSymbol) => {
-      if (!session) return;
+      if (!brokerSession) return;
 
       botRef.current.running = true;
       botRef.current.config = config;
@@ -264,11 +264,11 @@ export const useTradingBot = () => {
 
       setIsRunning(true);
       setStatus("Ativo");
-      setBalance(session.creditCents / 100);
+      setBalance(brokerSession?.creditCents / 100);
 
       executeTradeCycle(config, symbol);
     },
-    [session, executeTradeCycle]
+    [brokerSession, executeTradeCycle]
   );
 
   const winRate =

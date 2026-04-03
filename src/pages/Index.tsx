@@ -14,7 +14,7 @@ import { alphaApi, type Symbol as ApiSymbol } from "@/lib/api";
 const Index = () => {
   const [activeTab, setActiveTab] = useState("terminal");
   const [loginOpen, setLoginOpen] = useState(false);
-  const { session, isLoggedIn } = useAuth();
+  const { isLoggedIn, isBrokerConnected, brokerSession } = useAuth();
   const [symbols, setSymbols] = useState<ApiSymbol[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<ApiSymbol | null>(null);
 

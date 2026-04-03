@@ -26,7 +26,7 @@ interface BotConfig {
 }
 
 export const useTradingBot = () => {
-  const { session } = useAuth();
+  const { brokerSession } = useAuth();
   const [isRunning, setIsRunning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [trades, setTrades] = useState<TradeEntry[]>([]);

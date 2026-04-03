@@ -153,8 +153,17 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
   );
 };
 
-const HistoryContent = ({ entries }: { entries: TradeEntry[] }) => (
-  <div className="flex-1 overflow-y-auto px-3 py-3">
+const HistoryContent = ({ entries, onClearHistory }: { entries: TradeEntry[]; onClearHistory?: () => void }) => (
+  <div className="flex-1 overflow-y-auto px-3 py-3 scrollbar-hide">
+    {entries.length > 0 && onClearHistory && (
+      <button
+        onClick={onClearHistory}
+        className="w-full flex items-center justify-center gap-2 mb-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+      >
+        <Trash2 size={13} />
+        Limpar histórico
+      </button>
+    )}
     {entries.length === 0 ? (
       <p className="text-sm text-muted-foreground text-center mt-8">
         Nenhuma operação ainda

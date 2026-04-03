@@ -93,6 +93,7 @@ const Index = () => {
         </div>
       </div>
 
+      <HistoryDrawer entries={bot.trades} />
       <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
     </div>
   );

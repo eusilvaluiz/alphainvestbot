@@ -77,6 +77,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
       const last = chartData[chartData.length - 1];
       setCurrentPrice(last.close);
+      onPriceUpdate?.(last.close);
       setStats({
         open: chartData[0].open,
         high: Math.max(...chartData.map((d) => d.high)),

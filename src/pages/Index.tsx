@@ -15,11 +15,19 @@ import { alphaApi, type Symbol as ApiSymbol } from "@/lib/api";
 const Index = () => {
   const [activeTab, setActiveTab] = useState("terminal");
   const [loginOpen, setLoginOpen] = useState(false);
+  const [currentPrice, setCurrentPrice] = useState(0);
   const { isLoggedIn, isBrokerConnected, brokerSession } = useAuth();
   const [symbols, setSymbols] = useState<ApiSymbol[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<ApiSymbol | null>(null);
 
   const bot = useTradingBot();
+
+  const handlePriceUpdate = (price: number) => {
+    setCurrentPrice(price);
+    bot.updateCurrentPrice(price);
+  };
+
+  const lastTradeDirection = bot.trades.length > 0 ? bot.trades[0].direction : null;
 
   useEffect(() => {
     alphaApi.getSymbols().then((syms) => {

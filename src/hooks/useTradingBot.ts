@@ -305,7 +305,7 @@ export const useTradingBot = () => {
       brokerSession,
       getNextDirection,
       waitForExpiration,
-      waitForNextEntry,
+      waitForCandleOpen,
       stopBot,
     ]
   );

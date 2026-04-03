@@ -191,10 +191,13 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
     const interval = setInterval(async () => {
       try {
-        const unicData = await fetchUnicCandles(selectedSymbol.code, 5);
+        const unicData = await fetchUnicCandles(selectedSymbol.code, 10);
         if (unicData && unicData.length > 0) {
+          // Update ALL returned candles so manipulations are reflected
+          for (const candle of unicData) {
+            series.update(candle as any);
+          }
           const last = unicData[unicData.length - 1];
-          series.update(last as any);
           setCurrentPrice(last.close);
           onPriceUpdate?.(last.close);
         } else {
@@ -214,7 +217,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
           }
         }
       } catch {}
-    }, 3000);
+    }, 2000);
 
     return () => {
       clearInterval(interval);

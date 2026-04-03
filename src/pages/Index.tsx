@@ -55,6 +55,7 @@ const Index = () => {
       toast.error("Selecione um ativo primeiro");
       return;
     }
+    setSelectedModel(config.model);
     toast.info("Bot iniciado!", {
       description: `Modelo: ${config.model} | Entrada: R$ ${config.entryValue}`,
     });

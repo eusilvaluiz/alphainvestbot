@@ -19,6 +19,7 @@ const Index = () => {
   const { isLoggedIn, isBrokerConnected, brokerSession } = useAuth();
   const [symbols, setSymbols] = useState<ApiSymbol[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<ApiSymbol | null>(null);
+  const [selectedModel, setSelectedModel] = useState("grok");
 
   const bot = useTradingBot();
 
@@ -54,6 +55,7 @@ const Index = () => {
       toast.error("Selecione um ativo primeiro");
       return;
     }
+    setSelectedModel(config.model);
     toast.info("Bot iniciado!", {
       description: `Modelo: ${config.model} | Entrada: R$ ${config.entryValue}`,
     });
@@ -107,6 +109,7 @@ const Index = () => {
                 isProcessing={bot.isProcessing}
                 onStart={handleStart}
                 onStop={handleStop}
+                onModelChange={setSelectedModel}
               />
             </div>
           </div>
@@ -124,7 +127,7 @@ const Index = () => {
         currentPrice={currentPrice}
         isTrading={bot.isRunning}
         lastTradeDirection={lastTradeDirection}
-        selectedModel="google/gemini-3-flash-preview"
+        selectedModel={selectedModel}
       />
     </div>
   );

@@ -22,6 +22,7 @@ interface ConfigPanelProps {
   isProcessing: boolean;
   onStart: (config: BotConfig) => void;
   onStop: () => void;
+  onModelChange?: (model: AiModel) => void;
 }
 
 const ConfigPanel = ({
@@ -31,6 +32,7 @@ const ConfigPanel = ({
   isProcessing,
   onStart,
   onStop,
+  onModelChange,
 }: ConfigPanelProps) => {
   const { user } = useAuth();
   const [entryValue, setEntryValue] = useState("10");
@@ -60,6 +62,7 @@ const ConfigPanel = ({
         setStopWin(String(data.stop_win));
         setStopLoss(String(data.stop_loss));
         setSelectedModel(data.model as AiModel);
+        onModelChange?.(data.model as AiModel);
       } else if (isLoggedIn && balance > 0) {
         const entry = Math.round(balance * 0.05);
         setEntryValue(String(entry));
@@ -225,7 +228,7 @@ const ConfigPanel = ({
               variant={selectedModel === model.id ? "trading" : "trading-ghost"}
               size="sm"
               className="text-xs"
-              onClick={() => setSelectedModel(model.id)}
+              onClick={() => { setSelectedModel(model.id); onModelChange?.(model.id); }}
               disabled={isRunning}
             >
               {model.label}

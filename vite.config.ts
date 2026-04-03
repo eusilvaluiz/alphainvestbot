@@ -11,6 +11,14 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      "/alpha-api": {
+        target: "https://www.alphainvestbot.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/alpha-api/, "/api"),
+        secure: true,
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   optimizeDeps: {

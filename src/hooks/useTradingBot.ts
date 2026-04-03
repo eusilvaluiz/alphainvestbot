@@ -99,19 +99,23 @@ export const useTradingBot = () => {
     []
   );
 
-  // Random delay between 7-14 seconds (same as base site)
-  const waitForNextEntry = useCallback((): Promise<void> => {
-    const delay = Math.floor(Math.random() * 7001) + 7000;
+  // Wait until the next candle opens (second 00 of the next minute)
+  const waitForCandleOpen = useCallback((): Promise<void> => {
     return new Promise((resolve) => {
-      const timeout = setTimeout(() => resolve(), delay);
-      // Check if bot was stopped during wait
       const checkInterval = setInterval(() => {
         if (!botRef.current.running) {
-          clearTimeout(timeout);
+          clearInterval(checkInterval);
+          resolve();
+          return;
+        }
+        const now = new Date();
+        const seconds = now.getSeconds();
+        // Enter at second 0 (candle open, timer shows ~0:59)
+        if (seconds === 0) {
           clearInterval(checkInterval);
           resolve();
         }
-      }, 500);
+      }, 200);
     });
   }, []);
 

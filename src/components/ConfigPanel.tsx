@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 type AiModel = "grok" | "claude" | "gpt";
 
@@ -38,9 +39,8 @@ const ConfigPanel = ({
   const [stopLoss, setStopLoss] = useState("100");
   const [selectedModel, setSelectedModel] = useState<AiModel>("grok");
   const [loaded, setLoaded] = useState(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Load saved config when user logs in
   useEffect(() => {
     if (!user?.id || loaded) return;
 
@@ -60,65 +60,18 @@ const ConfigPanel = ({
         setStopWin(String(data.stop_win));
         setStopLoss(String(data.stop_loss));
         setSelectedModel(data.model as AiModel);
+      } else if (isLoggedIn && balance > 0) {
+        const entry = Math.round(balance * 0.05);
+        setEntryValue(String(entry));
+        setStopWin(String(entry * 10));
+        setStopLoss(String(entry * 5));
       }
+
       setLoaded(true);
     };
 
-    loadConfig();
-  }, [user?.id, loaded]);
-
-  // Auto-calculate based on balance only if no saved config
-  useEffect(() => {
-    if (isLoggedIn && balance > 0 && !isRunning && !loaded) {
-      const entry = Math.round(balance * 0.05);
-      setEntryValue(String(entry));
-      setStopWin(String(entry * 10));
-      setStopLoss(String(entry * 5));
-    }
-  }, [isLoggedIn, balance, isRunning, loaded]);
-
-  // Auto-save config with debounce
-  const autoSave = useCallback(() => {
-    if (!user?.id || !loaded || isRunning) return;
-
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-
-    saveTimer.current = setTimeout(async () => {
-      const payload = {
-        user_id: user.id,
-        entry_value: parseFloat(entryValue) || 10,
-        position: parseInt(position) || 3,
-        stop_win: parseFloat(stopWin) || 500,
-        stop_loss: parseFloat(stopLoss) || 100,
-        model: selectedModel,
-        is_active: true,
-        name: "Padrão",
-      };
-
-      const { data: existing } = await supabase
-        .from("bot_configs")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .limit(1)
-        .maybeSingle();
-
-      if (existing?.id) {
-        await supabase.from("bot_configs").update(payload).eq("id", existing.id);
-      } else {
-        await supabase.from("bot_configs").insert(payload);
-      }
-    }, 1500);
-  }, [user?.id, entryValue, position, stopWin, stopLoss, selectedModel, loaded, isRunning]);
-
-  useEffect(() => {
-    if (loaded && user?.id && !isRunning) {
-      autoSave();
-    }
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, [entryValue, position, stopWin, stopLoss, selectedModel, autoSave]);
+    void loadConfig();
+  }, [user?.id, loaded, isLoggedIn, balance]);
 
   const models: { id: AiModel; label: string }[] = [
     { id: "grok", label: "Grok 4.1" },
@@ -126,14 +79,66 @@ const ConfigPanel = ({
     { id: "gpt", label: "GPT 5.1" },
   ];
 
+  const buildConfig = (): BotConfig => ({
+    entryValue: parseFloat(entryValue) || 0,
+    position: parseInt(position) || 0,
+    stopWin: parseFloat(stopWin) || 0,
+    stopLoss: parseFloat(stopLoss) || 0,
+    model: selectedModel,
+  });
+
+  const handleSave = async () => {
+    if (!user?.id) return;
+
+    setSaving(true);
+
+    try {
+      const config = buildConfig();
+      const payload = {
+        user_id: user.id,
+        entry_value: config.entryValue,
+        position: config.position,
+        stop_win: config.stopWin,
+        stop_loss: config.stopLoss,
+        model: config.model,
+        is_active: true,
+        name: "Padrão",
+      };
+
+      const { data: existing, error: readError } = await supabase
+        .from("bot_configs")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (readError) throw readError;
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("bot_configs")
+          .update(payload)
+          .eq("id", existing.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("bot_configs").insert(payload);
+
+        if (error) throw error;
+      }
+
+      toast.success("Configuração salva");
+    } catch (error: any) {
+      toast.error(error?.message || "Erro ao salvar configuração");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleStart = () => {
-    onStart({
-      entryValue: parseFloat(entryValue),
-      position: parseInt(position),
-      stopWin: parseFloat(stopWin),
-      stopLoss: parseFloat(stopLoss),
-      model: selectedModel,
-    });
+    onStart(buildConfig());
   };
 
   return (
@@ -238,14 +243,24 @@ const ConfigPanel = ({
             {isProcessing ? "Processando..." : "Stop"}
           </Button>
         ) : (
-          <Button
-            variant="trading"
-            className="w-full"
-            onClick={handleStart}
-            disabled={!isLoggedIn}
-          >
-            {isLoggedIn ? "Start" : "Login Necessário"}
-          </Button>
+          <div className="space-y-2">
+            <Button
+              variant="trading-ghost"
+              className="w-full"
+              onClick={handleSave}
+              disabled={!isLoggedIn || saving}
+            >
+              {!isLoggedIn ? "Login Necessário" : saving ? "Salvando..." : "Salvar"}
+            </Button>
+            <Button
+              variant="trading"
+              className="w-full"
+              onClick={handleStart}
+              disabled={!isLoggedIn}
+            >
+              {isLoggedIn ? "Start" : "Login Necessário"}
+            </Button>
+          </div>
         )}
       </div>
     </div>

@@ -34,6 +34,14 @@ const TradeCard = ({ entry }: { entry: TradeEntry }) => {
   const isWin = entry.status === "win";
   const isLoss = entry.status === "loss";
 
+  // Real-time win/loss indicator while trade is open
+  const liveWinning = isOpen
+    ? entry.direction === "up"
+      ? entry.currentPrice > entry.entryPrice
+      : entry.currentPrice < entry.entryPrice
+    : false;
+  const liveTied = isOpen && entry.currentPrice === entry.entryPrice;
+
   return (
     <div
       className={`rounded-lg border p-3 mb-2 ${

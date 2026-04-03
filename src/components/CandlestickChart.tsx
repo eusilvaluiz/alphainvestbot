@@ -390,7 +390,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
           }
 
           lastRealtimeSyncAtRef.current = now;
-          void syncFromUnic(false, "realtime");
+          void syncFromUnic();
         }
       });
 

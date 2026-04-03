@@ -11,7 +11,7 @@ const Header = ({ onLoginClick }: HeaderProps) => {
   const { user, isLoggedIn, signOut, isBrokerConnected, brokerSession } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const displayName = brokerSession?.login || user?.email?.split("@")[0] || "";
+  const displayName = brokerSession?.login || user?.user_metadata?.username || user?.email?.split("@")[0] || "";
 
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-border">
@@ -47,7 +47,7 @@ const Header = ({ onLoginClick }: HeaderProps) => {
                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-primary hover:bg-secondary transition-colors"
                   >
                     <Link size={14} />
-                    Conectar Corretora
+                    Reconectar sessão
                   </button>
                 )}
                 <button

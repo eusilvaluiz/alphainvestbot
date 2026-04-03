@@ -13,7 +13,7 @@ const SidebarNav = ({ activeTab, onTabChange }: SidebarNavProps) => {
     { id: "terminal", icon: Terminal },
   ];
 
-  const displayName = brokerSession?.login || user?.email || "";
+  const displayName = brokerSession?.login || user?.user_metadata?.username || user?.email || "";
   const initials = displayName.slice(0, 2).toUpperCase();
 
   return (

@@ -19,6 +19,7 @@ const Index = () => {
   const { isLoggedIn, isBrokerConnected, brokerSession } = useAuth();
   const [symbols, setSymbols] = useState<ApiSymbol[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<ApiSymbol | null>(null);
+  const [selectedModel, setSelectedModel] = useState("grok");
 
   const bot = useTradingBot();
 

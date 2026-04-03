@@ -16,9 +16,7 @@ const Header = ({ onLoginClick }: HeaderProps) => {
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-border">
       <div className="flex-1" />
-      <h1 className="font-heading text-2xl font-bold tracking-wider text-primary italic">
-        ALPHA BOT
-      </h1>
+      <img src={logoImg} alt="Alpha Bot" className="h-8" />
       <div className="flex-1 flex justify-end items-center gap-2">
         {isLoggedIn ? (
           <div className="relative">

@@ -159,7 +159,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
   const ablyClientRef = useRef<Ably.Realtime | null>(null);
   const syncInFlightRef = useRef(false);
   const lastRealtimeSyncAtRef = useRef(0);
-  const lastFreshSessionSyncAtRef = useRef(0);
+  
   const [currentPrice, setCurrentPrice] = useState(0);
   const [stats, setStats] = useState({ open: 0, high: 0, low: 0 });
   const [showDropdown, setShowDropdown] = useState(false);

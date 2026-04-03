@@ -465,6 +465,16 @@ export const useTradingBot = () => {
 
   const winRate = operations > 0 ? (wins / operations) * 100 : 0;
 
+  const clearHistory = useCallback(() => {
+    setTrades([]);
+    setProfitLoss(0);
+    setWins(0);
+    setLosses(0);
+    setOperations(0);
+    botRef.current.profitLoss = 0;
+    persistNow();
+  }, [persistNow]);
+
   return {
     isRunning,
     isProcessing,
@@ -482,5 +492,6 @@ export const useTradingBot = () => {
     currentMartingaleLevel,
     isMartingale,
     resumeBot,
+    clearHistory,
   };
 };

@@ -112,12 +112,12 @@ const Index = () => {
           </div>
 
           <div className="w-72 border-l border-border p-4 hidden xl:block">
-            <HistorySidebar entries={bot.trades} />
+            <HistorySidebar entries={bot.trades} onClearHistory={bot.clearHistory} />
           </div>
         </div>
       </div>
 
-      <HistoryDrawer entries={bot.trades} />
+      <HistoryDrawer entries={bot.trades} onClearHistory={bot.clearHistory} />
       <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
       <AiAnalysisToast
         selectedSymbol={selectedSymbol}

@@ -498,7 +498,9 @@ async function handleTransaction(session: SessionData, transactionId: number) {
 }
 
 function makeSettlementResult(transactionId: number, outcome: string, resultCents: number, sData: any) {
-  const profitCents = outcome === "Ganhou" ? resultCents : outcome === "Empatou" ? 0 : resultCents;
+  // NOTE: settlement's amount_result_cents is the GROSS return (entry + profit),
+  // not the net profit. We intentionally omit profit_cents here so the client
+  // falls back to calculating profit from the odd (payout) value, which is correct.
   console.log("Settlement result:", transactionId, outcome, "resultCents:", resultCents);
   return {
     date: new Date().toISOString(),
@@ -516,7 +518,7 @@ function makeSettlementResult(transactionId: number, outcome: string, resultCent
       amount_percent: 0,
       returns: String(resultCents / 100),
       returns_cents: resultCents,
-      profit_cents: profitCents,
+      profit_cents: outcome === "Empatou" ? 0 : outcome === "Perdeu" ? resultCents : undefined,
       expiration: 0,
       expiration_date: "",
       notes: "",

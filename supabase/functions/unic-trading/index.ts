@@ -258,24 +258,38 @@ async function handleOpenPosition(
     "Content-Type": "application/json",
   };
 
+  const requestBody = {
+    __token: getCsrfFromCookies(session.cookies),
+    amount: amountCents,
+    direction: direction, // 1 = up, 0 = down
+    expiration: 1, // 1 minute
+    symbol: symbol,
+    symbol_price: price,
+    selected_account: session.accountId,
+  };
+
+  console.log("open-position request:", JSON.stringify({ symbol, direction, amountCents, price, accountId: session.accountId }));
+
   const res = await fetch(`${UNIC_BASE}/publicapi/binary/transaction`, {
     method: "POST",
     headers: postHeaders,
-    body: JSON.stringify({
-      __token: getCsrfFromCookies(session.cookies),
-      amount: amountCents,
-      direction: direction, // 1 = up, 0 = down
-      expiration: 1, // 1 minute
-      symbol: symbol,
-      symbol_price: price,
-      selected_account: session.accountId,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
-  const data = await res.json();
+  const rawText = await res.text();
+  console.log("open-position response status:", res.status, "body:", rawText);
+
+  let data: any;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    throw new Error(`Broker retornou resposta inválida (HTTP ${res.status}): ${rawText.substring(0, 200)}`);
+  }
 
   if (data.status !== "success") {
-    throw new Error(data.msg || "Erro ao abrir posição");
+    const errorDetail = data.msg || data.message || data.error || JSON.stringify(data);
+    console.error("open-position failed:", errorDetail);
+    throw new Error(`Erro ao abrir posição: ${errorDetail}`);
   }
 
   return {

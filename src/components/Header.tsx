@@ -9,7 +9,7 @@ interface HeaderProps {
   onHistoryClick?: () => void;
 }
 
-const Header = ({ onLoginClick }: HeaderProps) => {
+const Header = ({ onLoginClick, onHistoryClick }: HeaderProps) => {
   const { user, isLoggedIn, signOut, isBrokerConnected, brokerSession } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 

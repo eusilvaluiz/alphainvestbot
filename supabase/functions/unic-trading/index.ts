@@ -435,49 +435,91 @@ async function handleSettlement(session: SessionData) {
 
 /** GET /transaction/{id} — Get transaction details */
 async function handleTransaction(session: SessionData, transactionId: number) {
-  let transaction: any = null;
-
+  // Strategy 1: Try settlement endpoint first (fastest, no accountId needed)
   try {
-    // Try fetching history with and without account_id
-    const accountId = session.accountId;
-    const historyUrl = accountId
-      ? `${UNIC_BASE}/binary/history/1?account_id=${accountId}`
-      : `${UNIC_BASE}/binary/history/1`;
-
-    const firstRes = await fetch(historyUrl, {
-      headers: makeHeaders(session),
-    });
-    const firstData = await firstRes.json();
-    
-    console.log("History response keys:", Object.keys(firstData), "status:", firstData.status);
-    
-    const limit = firstData.limit ?? 10;
-    const total = firstData.total ?? 0;
-    const totalPages = firstData.last_page ?? (Math.ceil(total / limit) || 1);
-
-    console.log("History: pages=", totalPages, "total=", total, "target:", transactionId, "accountId:", accountId);
-
-    // If no results with account_id, try without
-    if (total === 0 && accountId) {
-      const retryRes = await fetch(`${UNIC_BASE}/binary/history/1`, {
-        headers: makeHeaders(session),
-      });
-      const retryData = await retryRes.json();
-      console.log("History retry without account_id: total=", retryData.total);
+    const settlementUrls = [
+      `${UNIC_BASE}/binary/transactions/settlement`,
+      ...(session.accountId != null ? [`${UNIC_BASE}/binary/transactions/settlement?account_id=${session.accountId}`] : []),
+    ];
+    for (const url of settlementUrls) {
+      const sRes = await fetch(url, { headers: makeHeaders(session) });
+      const sData = await sRes.json();
+      console.log("Settlement check for tx", transactionId, ":", JSON.stringify(sData).substring(0, 400));
       
-      if ((retryData.total ?? 0) > 0) {
-        return searchInHistory(session, retryData, transactionId);
+      // Settlement result_type: 1=win, 2=loss, 0=draw/pending
+      if (sData.updated === 1 || sData.amount_result_cents !== undefined) {
+        const resultCents = sData.amount_result_cents ?? 0;
+        // result_type from broker: check if it maps to win/loss/draw
+        if (resultCents > 0) {
+          return makeSettlementResult(transactionId, "Ganhou", resultCents, sData);
+        } else if (resultCents === 0 && sData.updated === 1) {
+          return makeSettlementResult(transactionId, "Empatou", 0, sData);
+        } else if (resultCents < 0 || (sData.result_type && sData.updated === 1)) {
+          return makeSettlementResult(transactionId, "Perdeu", resultCents, sData);
+        }
       }
     }
-
-    if (total > 0) {
-      return searchInHistory(session, firstData, transactionId);
-    }
   } catch (e) {
-    console.error("History error:", e);
+    console.error("Settlement check error:", e);
+  }
+
+  // Strategy 2: Try history (try multiple account_id approaches)
+  const historyUrls = [
+    `${UNIC_BASE}/binary/history/1`,
+    ...(session.accountId != null ? [`${UNIC_BASE}/binary/history/1?account_id=${session.accountId}`] : []),
+    `${UNIC_BASE}/binary/history/1?account_id=0`,
+  ];
+
+  for (const historyUrl of historyUrls) {
+    try {
+      const res = await fetch(historyUrl, { headers: makeHeaders(session) });
+      const data = await res.json();
+      const total = data.total ?? 0;
+      console.log("History:", historyUrl.split("?")[1] ?? "no-params", "total=", total, "target:", transactionId);
+
+      if (total > 0) {
+        const result = await searchInHistory(session, data, transactionId);
+        if (result.status === "success") return result;
+      }
+    } catch (e) {
+      console.error("History error:", e);
+    }
   }
 
   return makePendingResult(transactionId);
+}
+
+function makeSettlementResult(transactionId: number, outcome: string, resultCents: number, sData: any) {
+  const profitCents = outcome === "Ganhou" ? resultCents : outcome === "Empatou" ? 0 : resultCents;
+  console.log("Settlement result:", transactionId, outcome, "resultCents:", resultCents);
+  return {
+    date: new Date().toISOString(),
+    status: "success",
+    transaction: {
+      id: transactionId,
+      date: new Date().toISOString(),
+      status: outcome,
+      status_id: outcome === "Ganhou" ? 2 : outcome === "Empatou" ? 3 : 1,
+      direction: 0,
+      symbol: "",
+      symbol_price: "0",
+      amount: "0",
+      amount_cents: 0,
+      amount_percent: 0,
+      returns: String(resultCents / 100),
+      returns_cents: resultCents,
+      profit_cents: profitCents,
+      expiration: 0,
+      expiration_date: "",
+      notes: "",
+      user: {
+        id: 0,
+        login: "",
+        balance: sData.user_credit ?? "0",
+        balance_cents: 0,
+      },
+    },
+  };
 }
 
 function makePendingResult(transactionId: number) {

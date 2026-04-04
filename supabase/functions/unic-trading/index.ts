@@ -123,6 +123,28 @@ async function doLogin(brokerUser: string, brokerPass: string): Promise<SessionD
     const newXsrf = cookieMap.get("XSRF-TOKEN");
     const finalXsrf = newXsrf ? decodeURIComponent(newXsrf.split("=").slice(1).join("=")) : xsrfToken;
 
+    // If accountId not found in HTML, try fetching from accounts API
+    if (!accountId) {
+      try {
+        const tmpSession: SessionData = { cookies: finalCookies, xsrf: finalXsrf, accountId: null };
+        const accRes = await fetch(`${UNIC_BASE}/binary/accounts`, {
+          headers: makeHeaders(tmpSession),
+        });
+        const accData = await accRes.json();
+        console.log("Accounts API response:", JSON.stringify(accData).substring(0, 300));
+        if (Array.isArray(accData) && accData.length > 0) {
+          accountId = accData[0].id;
+        } else if (accData.data && Array.isArray(accData.data) && accData.data.length > 0) {
+          accountId = accData.data[0].id;
+        } else if (accData.id) {
+          accountId = accData.id;
+        }
+        console.log("doLogin accountId from API:", accountId);
+      } catch (e) {
+        console.error("Failed to get accountId from API:", e);
+      }
+    }
+
     return { cookies: finalCookies, xsrf: finalXsrf, accountId };
   } catch (error) {
     console.error("Login error:", error);

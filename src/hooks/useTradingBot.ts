@@ -280,6 +280,13 @@ export const useTradingBot = () => {
         await waitForExpiration(result.expiration_timestamp);
         if (!botRef.current.running) return;
 
+        const processingTrades = botRef.current.trades.map((t) =>
+          t.id === result.transaction_id ? { ...t, status: "processing" as const } : t
+        );
+        botRef.current.trades = processingTrades;
+        setTrades(processingTrades);
+        persistNow();
+
         setIsProcessing(true);
         setStatus("Verificando...");
 

@@ -406,7 +406,7 @@ async function handleTransaction(session: SessionData, transactionId: number) {
     const firstData = await firstRes.json();
     const limit = firstData.limit ?? 10;
     const total = firstData.total ?? 0;
-    const totalPages = firstData.last_page ?? Math.ceil(total / limit) || 1;
+    const totalPages = firstData.last_page ?? (Math.ceil(total / limit) || 1);
 
     console.log("History: pages=", totalPages, "total=", total, "target:", transactionId);
 

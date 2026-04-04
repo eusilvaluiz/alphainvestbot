@@ -459,30 +459,56 @@ async function handleTransaction(session: SessionData, transactionId: number) {
   return makePendingResult(transactionId);
 }
 
-  if (!transaction) {
-    return {
+function makePendingResult(transactionId: number) {
+  return {
+    date: new Date().toISOString(),
+    status: "pending",
+    transaction: {
+      id: transactionId,
       date: new Date().toISOString(),
-      status: "pending",
-      transaction: {
-        id: transactionId,
-        date: new Date().toISOString(),
-        status: "Pendente",
-        status_id: 0,
-        direction: 0,
-        symbol: "",
-        symbol_price: "0",
-        amount: "0",
-        amount_cents: 0,
-        amount_percent: 0,
-        returns: "0",
-        returns_cents: 0,
-        profit_cents: 0,
-        expiration: 0,
-        expiration_date: "",
-        notes: "",
-        user: { id: 0, login: "", balance: "0", balance_cents: 0 },
-      },
-    };
+      status: "Pendente",
+      status_id: 0,
+      direction: 0,
+      symbol: "",
+      symbol_price: "0",
+      amount: "0",
+      amount_cents: 0,
+      amount_percent: 0,
+      returns: "0",
+      returns_cents: 0,
+      profit_cents: 0,
+      expiration: 0,
+      expiration_date: "",
+      notes: "",
+      user: { id: 0, login: "", balance: "0", balance_cents: 0 },
+    },
+  };
+}
+
+async function searchInHistory(session: SessionData, firstPageData: any, transactionId: number) {
+  const limit = firstPageData.limit ?? 10;
+  const total = firstPageData.total ?? 0;
+  const totalPages = firstPageData.last_page ?? (Math.ceil(total / limit) || 1);
+  let transaction: any = null;
+
+  // Search from last page backwards (most recent first)
+  for (let page = totalPages; page >= Math.max(1, totalPages - 5) && !transaction; page--) {
+    const data = page === 1 ? firstPageData : await (await fetch(`${UNIC_BASE}/binary/history/${page}`, { headers: makeHeaders(session) })).json();
+    const txList = data.data || data.transactions?.data || data.transactions || [];
+
+    if (Array.isArray(txList)) {
+      for (const tx of txList) {
+        if (tx.id === transactionId || tx.transaction_id === transactionId) {
+          transaction = tx;
+          console.log("Found tx:", JSON.stringify(tx).substring(0, 500));
+          break;
+        }
+      }
+    }
+  }
+
+  if (!transaction) {
+    return makePendingResult(transactionId);
   }
 
   // Parse amounts — broker uses "return" field as "37,00" format
@@ -493,7 +519,7 @@ async function handleTransaction(session: SessionData, transactionId: number) {
   const returnCents = Math.round(returnFloat * 100);
   const amountCents = transaction.amount_cents ?? Math.round(amountFloat * 100);
 
-  // Determine outcome by comparing return vs amount (most reliable)
+  // Determine outcome by comparing return vs amount
   let outcome: "Ganhou" | "Perdeu" | "Empatou" | "Pendente";
   let statusId: number;
 

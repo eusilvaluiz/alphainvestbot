@@ -291,7 +291,7 @@ export const useTradingBot = () => {
         persistNow();
 
         await waitForExpiration(result.expiration_timestamp);
-        if (!botRef.current.running) return;
+        // Don't abort here — we must settle the open trade even if bot was stopped
 
         const processingTrades = botRef.current.trades.map((t) =>
           t.id === result.transaction_id ? { ...t, status: "processing" as const } : t

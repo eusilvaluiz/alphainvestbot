@@ -574,9 +574,24 @@ serve(async (req) => {
       case "login":
         result = await handleLogin(session);
         break;
-      case "open-position":
-        result = await handleOpenPosition(session, symbol, direction, amount, price);
+      case "open-position": {
+        // Refresh XSRF before POST to avoid 419
+        session = await refreshXsrf(session);
+        try {
+          result = await handleOpenPosition(session, symbol, direction, amount, price);
+        } catch (e: any) {
+          // If CSRF mismatch, full re-login and retry once
+          if (e.message?.includes("CSRF") && broker_user && broker_pass) {
+            console.log("CSRF mismatch, full re-login and retry");
+            session = await doLogin(broker_user, broker_pass);
+            if (!session) throw new Error("Re-login failed");
+            result = await handleOpenPosition(session, symbol, direction, amount, price);
+          } else {
+            throw e;
+          }
+        }
         break;
+      }
       case "settlement":
         result = await handleSettlement(session);
         break;

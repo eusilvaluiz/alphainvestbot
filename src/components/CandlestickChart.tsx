@@ -572,24 +572,22 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3">
+      <div className="flex items-center justify-between px-4 py-2.5">
+        {/* Left: symbol picker */}
         <div className="flex items-center gap-3 relative">
           {selectedSymbol && (
-            <img src={selectedSymbol.img} alt={selectedSymbol.name} className="w-8 h-8" />
+            <img src={selectedSymbol.img} alt={selectedSymbol.name} className="w-7 h-7" />
           )}
           <div
             className="cursor-pointer"
             onClick={() => setShowDropdown(!showDropdown)}
           >
             <div className="flex items-center gap-1">
-              <span className="font-heading font-semibold text-foreground">
+              <span className="font-heading font-semibold text-sm text-foreground">
                 {selectedSymbol?.name || "Ethereum"}
               </span>
               <ChevronDown size={14} className="text-muted-foreground" />
             </div>
-            <span className="text-xs text-muted-foreground">
-              {selectedSymbol?.code?.replace("USDT", " / USD") || "ETH / USD"}
-            </span>
           </div>
           {showDropdown && (
             <>
@@ -603,16 +601,42 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
             </>
           )}
         </div>
+
+        {/* Center: price + stats inline */}
         <div className="flex items-center gap-4">
+          <span className="text-lg font-heading font-bold text-foreground">
+            ${currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+          <div className="hidden sm:flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-1">
+              <span className="text-muted-foreground">A:</span>
+              <span className="text-foreground font-medium">${stats.open.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-muted-foreground">H:</span>
+              <span className="text-chart-green font-medium">${stats.high.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-muted-foreground">L:</span>
+              <span className="text-chart-red font-medium">${stats.low.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-muted-foreground">Pay:</span>
+              <span className="text-chart-green font-medium">{payout}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: candle countdown + status */}
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Candle:</span>
             <span className={`text-sm font-mono font-bold ${candleCountdown <= 10 ? "text-chart-red" : "text-chart-green"}`}>
               {formatCountdown(candleCountdown)}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full ${statusColor} animate-pulse-glow`} />
-            <span className="text-xs text-muted-foreground uppercase tracking-wider">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
               {statusLabel}
             </span>
           </div>
@@ -620,26 +644,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       </div>
 
       <div ref={chartContainerRef} className="w-full" />
-
-      <div className="text-center py-4">
-        <span className="text-3xl font-heading font-bold text-foreground">
-          ${currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-4 border-t border-border">
-        {[
-          { label: "ABERTURA", value: `$${stats.open.toFixed(2)}`, color: "text-foreground" },
-          { label: "MÁXIMA", value: `$${stats.high.toFixed(2)}`, color: "text-chart-green" },
-          { label: "MÍNIMA", value: `$${stats.low.toFixed(2)}`, color: "text-chart-red" },
-          { label: "PAYOUT", value: payout, color: "text-chart-green" },
-        ].map((item) => (
-          <div key={item.label} className="text-center py-3 border-r border-border last:border-r-0">
-            <div className="text-[10px] text-muted-foreground tracking-wider mb-1">{item.label}</div>
-            <div className={`text-sm font-semibold ${item.color}`}>{item.value}</div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 };

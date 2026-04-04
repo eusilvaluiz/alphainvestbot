@@ -89,12 +89,20 @@ export const useTradingBot = () => {
     symbol: ApiSymbol | null;
     currentPrice: number;
     profitLoss: number;
+    trades: TradeEntry[];
+    wins: number;
+    losses: number;
+    operations: number;
   }>({
     running: p?.running ?? false,
     config: p?.config ?? null,
     symbol: null,
     currentPrice: 0,
     profitLoss: p?.profitLoss ?? 0,
+    trades: p?.trades ?? [],
+    wins: p?.wins ?? 0,
+    losses: p?.losses ?? 0,
+    operations: p?.operations ?? 0,
   });
 
   const directionCounter = useRef(p?.directionCounter ?? Math.floor(Math.random() * 2));

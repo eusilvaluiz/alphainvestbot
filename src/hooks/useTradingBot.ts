@@ -159,11 +159,11 @@ export const useTradingBot = () => {
 
   const updateCurrentPrice = useCallback((price: number) => {
     botRef.current.currentPrice = price;
-    setTrades((prev) =>
-      prev.map((t) =>
-        t.status === "open" ? { ...t, currentPrice: price } : t
-      )
+    const updated = botRef.current.trades.map((t) =>
+      t.status === "open" ? { ...t, currentPrice: price } : t
     );
+    botRef.current.trades = updated;
+    setTrades(updated);
   }, []);
 
   const waitUntilTimestamp = useCallback((targetTimestamp: number): Promise<void> => {

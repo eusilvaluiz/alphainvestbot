@@ -353,13 +353,13 @@ export const useTradingBot = () => {
 
         await waitForExpiration(result.expiration_timestamp);
 
-       // Poll the broker for the real result
+       // Poll the broker for the real result — fast polling
        let outcome: "win" | "loss" | "draw" = "loss";
        let resultAmount = -trade.amount;
        let realClosePrice = botRef.current.currentPrice || trade.currentPrice || trade.entryPrice;
 
-       for (let attempt = 0; attempt < 5; attempt++) {
-         await sleep(2000);
+       for (let attempt = 0; attempt < 4; attempt++) {
+         await sleep(attempt === 0 ? 500 : 1000);
          try {
            const txData = await alphaApi.getTransaction(result.transaction_id);
            if (txData.status === "success" && txData.transaction.status !== "Pendente") {
@@ -372,7 +372,6 @@ export const useTradingBot = () => {
 
              if (tx.status === "Ganhou") {
                outcome = "win";
-               // returns_cents is the profit (not including original amount)
                resultAmount = tx.returns_cents > 0
                  ? tx.returns_cents / 100
                  : Number(((result.odd > 10 ? trade.amount * result.odd / 100 : trade.amount * (result.odd - 1))).toFixed(2));
@@ -387,16 +386,6 @@ export const useTradingBot = () => {
            }
          } catch (e) {
            console.warn("[Bot] Failed to fetch transaction result, attempt", attempt + 1, e);
-         }
-       }
-
-       // If broker didn't return a result, fallback to local calculation
-       if (outcome === "loss" && resultAmount === -trade.amount) {
-         const localResult = getTradeOutcomeFromPrice(trade, realClosePrice, result.odd);
-         if (localResult.outcome !== "loss") {
-           outcome = localResult.outcome;
-           resultAmount = localResult.resultAmount;
-           console.log("[Bot] Using local fallback:", outcome, resultAmount);
          }
        }
 

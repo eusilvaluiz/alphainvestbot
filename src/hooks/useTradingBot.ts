@@ -285,13 +285,13 @@ export const useTradingBot = () => {
         let settlement: Awaited<ReturnType<typeof alphaApi.getSettlement>> | null = null;
         let txn: Awaited<ReturnType<typeof alphaApi.getTransaction>> | null = null;
 
-        for (let attempt = 0; attempt < 12; attempt += 1) {
+        for (let attempt = 0; attempt < 20; attempt += 1) {
           if (!botRef.current.running) return;
           settlement = await alphaApi.getSettlement();
           txn = await alphaApi.getTransaction(result.transaction_id);
           const statusId = txn.transaction.status_id;
           if (statusId === 1 || statusId === 2) break;
-          if (attempt < 11) await new Promise((r) => setTimeout(r, 250));
+          if (attempt < 19) await new Promise((r) => setTimeout(r, attempt < 3 ? 100 : 200));
         }
 
         if (!botRef.current.running || !settlement || !txn) return;

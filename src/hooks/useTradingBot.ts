@@ -461,6 +461,10 @@ export const useTradingBot = () => {
       botRef.current.config = config;
       botRef.current.symbol = symbol;
       botRef.current.profitLoss = 0;
+      botRef.current.trades = [];
+      botRef.current.wins = 0;
+      botRef.current.losses = 0;
+      botRef.current.operations = 0;
 
       martingaleLevel.current = 0;
       lastDirection.current = null;
@@ -473,6 +477,7 @@ export const useTradingBot = () => {
       setWins(0);
       setLosses(0);
       setOperations(0);
+      setTrades([]);
       setCurrentMartingaleLevel(0);
       setIsMartingale(false);
 

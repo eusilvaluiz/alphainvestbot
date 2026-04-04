@@ -113,6 +113,7 @@ export interface TransactionResponse {
     amount_percent: number;
     returns: string;
     returns_cents: number;
+    profit_cents: number;
     expiration: number;
     expiration_date: string;
     notes: string;

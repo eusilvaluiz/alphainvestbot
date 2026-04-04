@@ -185,7 +185,7 @@ const ConfigPanel = ({
               value={entryValue}
               onChange={(e) => setEntryValue(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
               disabled={isRunning}
-              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-foreground outline-none focus:border-primary/50 transition-colors disabled:opacity-50"
+              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs font-bold text-foreground outline-none focus:border-primary/50 transition-colors disabled:opacity-50"
             />
           </div>
         </div>
@@ -209,14 +209,14 @@ const ConfigPanel = ({
                 setPosition(Math.min(10, Math.max(1, v)));
               }}
               disabled={isRunning}
-              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-foreground outline-none focus:border-yellow-500/50 transition-colors disabled:opacity-50"
+              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs font-bold text-foreground outline-none focus:border-yellow-500/50 transition-colors disabled:opacity-50"
             />
           ) : (
             <input
               type="text"
               disabled
               value="Desativado"
-              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-muted-foreground outline-none disabled:opacity-50"
+              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs text-muted-foreground outline-none disabled:opacity-50"
             />
           )}
         </div>
@@ -234,7 +234,7 @@ const ConfigPanel = ({
               value={stopWin}
               onChange={(e) => setStopWin(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
               disabled={isRunning}
-              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-chart-green outline-none focus:border-chart-green/50 transition-colors disabled:opacity-50"
+              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs font-bold text-chart-green outline-none focus:border-chart-green/50 transition-colors disabled:opacity-50"
             />
           </div>
         </div>
@@ -248,7 +248,7 @@ const ConfigPanel = ({
               value={stopLoss}
               onChange={(e) => setStopLoss(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
               disabled={isRunning}
-              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-chart-red outline-none focus:border-chart-red/50 transition-colors disabled:opacity-50"
+              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs font-bold text-chart-red outline-none focus:border-chart-red/50 transition-colors disabled:opacity-50"
             />
           </div>
         </div>

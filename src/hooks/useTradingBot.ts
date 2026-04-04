@@ -210,11 +210,9 @@ export const useTradingBot = () => {
       : Math.floor(referenceTimestamp / 60) * 60 + 60;
   }, []);
 
-  const getRandomFirstEntryTimestamp = useCallback((): number => {
+  const getFirstEntryTimestamp = useCallback((): number => {
     const now = Math.floor(Date.now() / 1000);
-    const nextCandleOpen = getNextCandleOpenTimestamp(now);
-    const extraCandlesToSkip = Math.floor(Math.random() * 3);
-    return nextCandleOpen + extraCandlesToSkip * 60;
+    return getNextCandleOpenTimestamp(now);
   }, [getNextCandleOpenTimestamp]);
 
   const executeTradeCycle = useCallback(
@@ -226,26 +224,22 @@ export const useTradingBot = () => {
       persistNow();
 
       try {
-        const entryTimestamp =
-          scheduledEntryTimestamp ?? getRandomFirstEntryTimestamp();
+        const entryTimestamp = scheduledEntryTimestamp ?? getFirstEntryTimestamp();
 
         await waitUntilTimestamp(entryTimestamp);
         if (!botRef.current.running) return;
 
-        let direction: "up" | "down";
-        let currentAmount = config.entryValue;
         const level = martingaleLevel.current;
+        const isMartingaleEntry = level > 0 && lastDirection.current;
+        const direction: "up" | "down" = isMartingaleEntry
+          ? lastDirection.current!
+          : getNextDirection();
+        const currentAmount = isMartingaleEntry
+          ? config.entryValue * Math.pow(2, level)
+          : config.entryValue;
 
-        if (level > 0 && lastDirection.current) {
-          direction = lastDirection.current;
-          currentAmount = config.entryValue * Math.pow(2, level);
-          setIsMartingale(true);
-        } else {
-          direction = getNextDirection();
-          lastDirection.current = direction;
-          setIsMartingale(false);
-        }
-
+        lastDirection.current = direction;
+        setIsMartingale(level > 0);
         setStatus("Entrando...");
 
         const amountStr = currentAmount.toFixed(2).replace(".", ",");
@@ -257,8 +251,6 @@ export const useTradingBot = () => {
           amount: amountStr,
           price: botRef.current.currentPrice,
         });
-
-        if (!botRef.current.running) return;
 
         const trade: TradeEntry = {
           id: result.transaction_id,
@@ -292,7 +284,6 @@ export const useTradingBot = () => {
         persistNow();
 
         await waitForExpiration(result.expiration_timestamp);
-        // Don't abort here — we must settle the open trade even if bot was stopped
 
         const processingTrades = botRef.current.trades.map((t) =>
           t.id === result.transaction_id ? { ...t, status: "processing" as const } : t
@@ -301,42 +292,37 @@ export const useTradingBot = () => {
         setTrades(processingTrades);
         persistNow();
 
-        setIsProcessing(true);
-        setStatus("Verificando...");
+        if (botRef.current.running) {
+          setIsProcessing(true);
+          setStatus("Verificando...");
+        }
 
         let settlement: Awaited<ReturnType<typeof alphaApi.getSettlement>> | null = null;
         let txn: Awaited<ReturnType<typeof alphaApi.getTransaction>> | null = null;
 
-        // Check immediately first — no delay
         settlement = await alphaApi.getSettlement();
         txn = await alphaApi.getTransaction(result.transaction_id);
         let settled = txn.transaction.status_id === 1 || txn.transaction.status_id === 2;
 
         if (!settled) {
-          // Poll with short intervals if not ready yet
           for (let attempt = 0; attempt < 30; attempt += 1) {
             await new Promise((r) => setTimeout(r, attempt < 5 ? 80 : 150));
             settlement = await alphaApi.getSettlement();
             txn = await alphaApi.getTransaction(result.transaction_id);
             const statusId = txn.transaction.status_id;
-            if (statusId === 1 || statusId === 2) { settled = true; break; }
+            if (statusId === 1 || statusId === 2) {
+              settled = true;
+              break;
+            }
           }
         }
 
         if (!settlement || !txn) return;
 
         const balanceData = await alphaApi.getBalance();
-        
-        // Debug: log raw API responses to understand win/loss mapping
-        console.log("[Bot] Settlement:", JSON.stringify({ result_type: settlement.result_type, amount_result_cents: settlement.amount_result_cents }));
-        console.log("[Bot] Transaction:", JSON.stringify({ status_id: txn.transaction.status_id, status: txn.transaction.status, returns_cents: txn.transaction.returns_cents, amount_cents: txn.transaction.amount_cents }));
-
-        // Use returns_cents as source of truth: positive = win, zero/negative = loss
         const returnsCents = txn.transaction.returns_cents;
         const isWin = returnsCents > 0;
         const resultAmount = returnsCents / 100;
-
-        console.log("[Bot] isWin:", isWin, "returnsCents:", returnsCents, "resultAmount:", resultAmount);
 
         const updatedTrades = botRef.current.trades.map((t) =>
           t.id === result.transaction_id
@@ -355,11 +341,27 @@ export const useTradingBot = () => {
           botRef.current.wins += 1;
           setWins(botRef.current.wins);
           newPL += resultAmount;
+          martingaleLevel.current = 0;
+          setCurrentMartingaleLevel(0);
+          setIsMartingale(false);
+          lastDirection.current = null;
         } else {
           botRef.current.losses += 1;
           setLosses(botRef.current.losses);
           newPL -= trade.amount;
+
+          if (martingaleLevel.current < config.position) {
+            martingaleLevel.current += 1;
+            setCurrentMartingaleLevel(martingaleLevel.current);
+            setIsMartingale(true);
+          } else {
+            martingaleLevel.current = 0;
+            setCurrentMartingaleLevel(0);
+            setIsMartingale(false);
+            lastDirection.current = null;
+          }
         }
+
         setProfitLoss(newPL);
         botRef.current.profitLoss = newPL;
 
@@ -370,6 +372,9 @@ export const useTradingBot = () => {
         );
 
         setIsProcessing(false);
+        if (botRef.current.running) {
+          setStatus("Aguardando candle...");
+        }
         persistNow();
 
         if (newPL <= -config.stopLoss) {
@@ -377,35 +382,15 @@ export const useTradingBot = () => {
           stopBot();
           return;
         }
+
         if (newPL >= config.stopWin) {
           setStatus("Stop Win");
           stopBot();
           return;
         }
 
-        if (isWin) {
-          martingaleLevel.current = 0;
-          setCurrentMartingaleLevel(0);
-          setIsMartingale(false);
-          lastDirection.current = null;
-        } else {
-          const currentLevel = martingaleLevel.current;
-          if (currentLevel < config.position) {
-            martingaleLevel.current = currentLevel + 1;
-            setCurrentMartingaleLevel(currentLevel + 1);
-            setIsMartingale(true);
-          } else {
-            martingaleLevel.current = 0;
-            setCurrentMartingaleLevel(0);
-            setIsMartingale(false);
-            lastDirection.current = null;
-          }
-        }
-
         if (botRef.current.running) {
-          const nextEntryTimestamp = getNextCandleOpenTimestamp(
-            result.expiration_timestamp
-          );
+          const nextEntryTimestamp = getNextCandleOpenTimestamp(result.expiration_timestamp);
           persistNow();
           void executeTradeCycle(config, symbol, nextEntryTimestamp);
         }
@@ -414,26 +399,23 @@ export const useTradingBot = () => {
         setIsProcessing(false);
         if (botRef.current.running) {
           setStatus("Aguardando candle...");
-          const retryTimestamp = getNextCandleOpenTimestamp(
-            Math.floor(Date.now() / 1000) + 1
-          );
+          const retryTimestamp = getNextCandleOpenTimestamp(Math.floor(Date.now() / 1000));
           void executeTradeCycle(config, symbol, retryTimestamp);
         }
       }
     },
     [
       brokerSession,
-      getNextDirection,
+      getFirstEntryTimestamp,
       getNextCandleOpenTimestamp,
-      getRandomFirstEntryTimestamp,
+      getNextDirection,
+      persistNow,
+      stopBot,
       waitForExpiration,
       waitUntilTimestamp,
-      stopBot,
-      persistNow,
     ]
   );
 
-  // Resume bot after refresh when symbols are loaded
   const resumeBot = useCallback(
     (symbols: ApiSymbol[]) => {
       if (resumedRef.current) return;
@@ -451,22 +433,20 @@ export const useTradingBot = () => {
       setIsRunning(true);
       setBalance(brokerSession.creditCents / 100);
 
-      // Check if there's an open trade that hasn't expired yet
-      const openTrade = saved.trades.find((t) => t.status === "open");
-      if (openTrade) {
+      const pendingTrade = saved.trades.find(
+        (t) => t.status === "open" || t.status === "processing"
+      );
+
+      if (pendingTrade) {
         const now = Math.floor(Date.now() / 1000);
-        if (now < openTrade.expirationTimestamp) {
-          // Still active — wait for expiration then continue
+        if (now < pendingTrade.expirationTimestamp) {
           setStatus("Ativo");
-          // We can't fully resume mid-trade settlement easily,
-          // so we wait for next candle after expiration
-          const nextEntry = getNextCandleOpenTimestamp(openTrade.expirationTimestamp);
+          const nextEntry = getNextCandleOpenTimestamp(pendingTrade.expirationTimestamp);
           void executeTradeCycle(saved.config, sym, nextEntry);
           return;
         }
       }
 
-      // No open trade or already expired — schedule next candle
       const nextEntry = getNextCandleOpenTimestamp(Math.floor(Date.now() / 1000));
       void executeTradeCycle(saved.config, sym, nextEntry);
     },
@@ -501,11 +481,11 @@ export const useTradingBot = () => {
       setCurrentMartingaleLevel(0);
       setIsMartingale(false);
 
-      const firstEntryTimestamp = getRandomFirstEntryTimestamp();
+      const firstEntryTimestamp = getFirstEntryTimestamp();
       persistNow();
       void executeTradeCycle(config, symbol, firstEntryTimestamp);
     },
-    [brokerSession, executeTradeCycle, getRandomFirstEntryTimestamp, persistNow]
+    [brokerSession, executeTradeCycle, getFirstEntryTimestamp, persistNow]
   );
 
   const winRate = operations > 0 ? (wins / operations) * 100 : 0;

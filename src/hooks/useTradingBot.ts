@@ -43,6 +43,7 @@ interface PersistedBotState {
 const STORAGE_KEY = "alpha_bot_state";
 const CANDLE_SECONDS = 60;
 const ENTRY_GRACE_SECONDS = 1;
+const MARTINGALE_ENTRY_GRACE_SECONDS = 5;
 
 const nowInSeconds = () => Math.floor(Date.now() / 1000);
 
@@ -58,9 +59,12 @@ const getStrictNextCandleOpen = (referenceTimestamp: number) => {
   return Math.floor(normalized / CANDLE_SECONDS) * CANDLE_SECONDS + CANDLE_SECONDS;
 };
 
-const getFollowUpEntryTimestamp = (expirationTimestamp: number) => {
+const getFollowUpEntryTimestamp = (
+  expirationTimestamp: number,
+  graceSeconds = ENTRY_GRACE_SECONDS
+) => {
   const now = nowInSeconds();
-  return now <= expirationTimestamp + ENTRY_GRACE_SECONDS
+  return now <= expirationTimestamp + graceSeconds
     ? expirationTimestamp
     : getStrictNextCandleOpen(now);
 };
@@ -272,7 +276,12 @@ export const useTradingBot = () => {
   }, [getNextCandleOpenTimestamp]);
 
   const executeTradeCycle = useCallback(
-    async (config: BotConfig, symbol: ApiSymbol, scheduledEntryTimestamp?: number) => {
+    async (
+      config: BotConfig,
+      symbol: ApiSymbol,
+      scheduledEntryTimestamp?: number,
+      allowedEntryGraceSeconds = ENTRY_GRACE_SECONDS
+    ) => {
       if (!botRef.current.running || !brokerSession) return;
 
       setIsProcessing(true);
@@ -286,13 +295,13 @@ export const useTradingBot = () => {
         if (!botRef.current.running) return;
 
         const entryDelaySeconds = nowInSeconds() - entryTimestamp;
-        if (entryDelaySeconds > ENTRY_GRACE_SECONDS) {
+        if (entryDelaySeconds > allowedEntryGraceSeconds) {
           const retryTimestamp = getStrictNextCandleOpenTimestamp(nowInSeconds());
           setIsProcessing(false);
           setStatus("Aguardando próxima candle...");
           persistNow();
           if (botRef.current.running) {
-            void executeTradeCycle(config, symbol, retryTimestamp);
+            void executeTradeCycle(config, symbol, retryTimestamp, allowedEntryGraceSeconds);
           }
           return;
         }
@@ -405,6 +414,7 @@ export const useTradingBot = () => {
         setTrades(updatedTrades);
 
         let newPL = botRef.current.profitLoss;
+        let shouldUseMartingaleFollowUp = false;
        if (outcome === "win") {
           botRef.current.wins += 1;
           setWins(botRef.current.wins);
@@ -429,6 +439,7 @@ export const useTradingBot = () => {
             martingaleLevel.current += 1;
             setCurrentMartingaleLevel(martingaleLevel.current);
             setIsMartingale(true);
+            shouldUseMartingaleFollowUp = true;
           } else {
             martingaleLevel.current = 0;
             setCurrentMartingaleLevel(0);
@@ -467,9 +478,15 @@ export const useTradingBot = () => {
         }
 
         if (botRef.current.running) {
-          const nextEntryTimestamp = getFollowUpEntryTimestamp(result.expiration_timestamp);
+          const nextEntryGraceSeconds = shouldUseMartingaleFollowUp
+            ? MARTINGALE_ENTRY_GRACE_SECONDS
+            : ENTRY_GRACE_SECONDS;
+          const nextEntryTimestamp = getFollowUpEntryTimestamp(
+            result.expiration_timestamp,
+            nextEntryGraceSeconds
+          );
           persistNow();
-          void executeTradeCycle(config, symbol, nextEntryTimestamp);
+          void executeTradeCycle(config, symbol, nextEntryTimestamp, nextEntryGraceSeconds);
         }
       } catch (error) {
         console.error("Trade cycle error:", error);
@@ -477,7 +494,7 @@ export const useTradingBot = () => {
         if (botRef.current.running) {
           setStatus("Aguardando candle...");
           const retryTimestamp = getStrictNextCandleOpenTimestamp(nowInSeconds());
-          void executeTradeCycle(config, symbol, retryTimestamp);
+          void executeTradeCycle(config, symbol, retryTimestamp, allowedEntryGraceSeconds);
         }
       }
     },

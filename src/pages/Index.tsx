@@ -20,6 +20,7 @@ const Index = () => {
   const [symbols, setSymbols] = useState<ApiSymbol[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<ApiSymbol | null>(null);
   const [selectedModel, setSelectedModel] = useState("grok");
+  const [liveBalance, setLiveBalance] = useState<number | null>(null);
 
   const bot = useTradingBot();
 
@@ -64,6 +65,12 @@ const Index = () => {
     if (isBrokerConnected && symbols.length === 0) {
       loadSymbols();
     }
+    // Fetch live balance when broker connects
+    if (isBrokerConnected) {
+      alphaApi.getBalance().then((b) => {
+        setLiveBalance(b.credit_cents / 100);
+      }).catch(() => {});
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isBrokerConnected]);
 
@@ -86,6 +93,8 @@ const Index = () => {
 
   const currentBalance = bot.isRunning
     ? bot.balance
+    : liveBalance !== null
+    ? liveBalance
     : brokerSession
     ? brokerSession.creditCents / 100
     : 0;

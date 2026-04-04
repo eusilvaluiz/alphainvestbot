@@ -499,7 +499,7 @@ export const useTradingBot = () => {
       setCurrentMartingaleLevel(0);
       setIsMartingale(false);
 
-      const firstEntryTimestamp = getRandomFirstEntryTimestamp();
+      const firstEntryTimestamp = getFirstEntryTimestamp();
       persistNow();
       void executeTradeCycle(config, symbol, firstEntryTimestamp);
     },

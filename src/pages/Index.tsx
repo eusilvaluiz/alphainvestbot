@@ -5,7 +5,7 @@ import Header from "@/components/Header";
 import CandlestickChart from "@/components/CandlestickChart";
 import ControlPanel from "@/components/ControlPanel";
 import ConfigPanel from "@/components/ConfigPanel";
-import HistorySidebar, { HistoryDrawer } from "@/components/HistorySidebar";
+import HistoryModal from "@/components/HistoryModal";
 import LoginModal from "@/components/LoginModal";
 import AiAnalysisToast from "@/components/AiAnalysisToast";
 import { useAuth } from "@/hooks/useAuth";

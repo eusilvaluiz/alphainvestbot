@@ -655,5 +655,7 @@ export const useTradingBot = () => {
     isMartingale,
     resumeBot,
     clearHistory,
+    stopWin: botRef.current.config?.stopWin ?? 0,
+    stopLoss: botRef.current.config?.stopLoss ?? 0,
   };
 };

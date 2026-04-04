@@ -130,6 +130,8 @@ const Index = () => {
                 losses={bot.losses}
                 martingaleLevel={bot.currentMartingaleLevel}
                 isMartingale={bot.isMartingale}
+                stopWin={bot.stopWin}
+                stopLoss={bot.stopLoss}
               />
               <ConfigPanel
                 isLoggedIn={isBrokerConnected}

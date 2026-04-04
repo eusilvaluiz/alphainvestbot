@@ -183,7 +183,7 @@ class AlphaApi {
   async login(user: string, pass: string): Promise<UserSession> {
     const res = await fetch(`${API_BASE}/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.getBaseHeaders(),
       body: JSON.stringify({ user, pass }),
     });
 

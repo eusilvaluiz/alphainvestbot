@@ -185,7 +185,7 @@ const ConfigPanel = ({
               value={entryValue}
               onChange={(e) => setEntryValue(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
               disabled={isRunning}
-              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-foreground outline-none focus:border-primary/50 transition-colors disabled:opacity-50"
+              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs font-bold text-foreground outline-none focus:border-primary/50 transition-colors disabled:opacity-50"
             />
           </div>
         </div>

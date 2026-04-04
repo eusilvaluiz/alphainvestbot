@@ -179,16 +179,16 @@ export const useTradingBot = () => {
     setTrades(updated);
   }, []);
 
-  const waitUntilTimestamp = useCallback((targetTimestamp: number): Promise<void> => {
+  const waitUntilTimestamp = useCallback((targetTimestamp: number, respectRunning = true): Promise<void> => {
     return new Promise((resolve) => {
       const now = Math.floor(Date.now() / 1000);
-      if (now >= targetTimestamp || !botRef.current.running) {
+      if (now >= targetTimestamp || (respectRunning && !botRef.current.running)) {
         resolve();
         return;
       }
       const checkInterval = setInterval(() => {
         const now = Math.floor(Date.now() / 1000);
-        if (now >= targetTimestamp || !botRef.current.running) {
+        if (now >= targetTimestamp || (respectRunning && !botRef.current.running)) {
           clearInterval(checkInterval);
           resolve();
         }
@@ -198,7 +198,8 @@ export const useTradingBot = () => {
 
   const waitForExpiration = useCallback(
     (expirationTimestamp: number): Promise<void> => {
-      return waitUntilTimestamp(expirationTimestamp);
+      // Always wait for the full expiration — never abort early even if bot is stopped
+      return waitUntilTimestamp(expirationTimestamp, false);
     },
     [waitUntilTimestamp]
   );

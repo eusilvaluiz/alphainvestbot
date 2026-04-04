@@ -261,8 +261,10 @@ export const useTradingBot = () => {
           martingaleLevel: level,
         };
 
-        setTrades((prev) => [trade, ...prev]);
-        setOperations((prev) => prev + 1);
+        botRef.current.trades = [trade, ...botRef.current.trades];
+        botRef.current.operations += 1;
+        setTrades(botRef.current.trades);
+        setOperations(botRef.current.operations);
         setStatus("Ativo");
 
         const creditStr = result.user_credit;

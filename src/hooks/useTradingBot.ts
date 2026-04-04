@@ -89,12 +89,20 @@ export const useTradingBot = () => {
     symbol: ApiSymbol | null;
     currentPrice: number;
     profitLoss: number;
+    trades: TradeEntry[];
+    wins: number;
+    losses: number;
+    operations: number;
   }>({
     running: p?.running ?? false,
     config: p?.config ?? null,
     symbol: null,
     currentPrice: 0,
     profitLoss: p?.profitLoss ?? 0,
+    trades: p?.trades ?? [],
+    wins: p?.wins ?? 0,
+    losses: p?.losses ?? 0,
+    operations: p?.operations ?? 0,
   });
 
   const directionCounter = useRef(p?.directionCounter ?? Math.floor(Math.random() * 2));
@@ -108,20 +116,15 @@ export const useTradingBot = () => {
       running: botRef.current.running,
       config: botRef.current.config,
       symbolCode: botRef.current.symbol?.code ?? null,
-      trades: [], // will be filled below
+      trades: botRef.current.trades,
       profitLoss: botRef.current.profitLoss,
-      wins: 0,
-      losses: 0,
-      operations: 0,
+      wins: botRef.current.wins,
+      losses: botRef.current.losses,
+      operations: botRef.current.operations,
       martingaleLevel: martingaleLevel.current,
       lastDirection: lastDirection.current,
       directionCounter: directionCounter.current,
     };
-    // We read the latest from setters
-    setTrades((t) => { state.trades = t; return t; });
-    setWins((w) => { state.wins = w; return w; });
-    setLosses((l) => { state.losses = l; return l; });
-    setOperations((o) => { state.operations = o; return o; });
     saveState(state);
   }, []);
 
@@ -139,32 +142,28 @@ export const useTradingBot = () => {
     setCurrentMartingaleLevel(0);
     setIsMartingale(false);
     lastDirection.current = null;
-    // Keep trades in state but mark bot as stopped in storage
-    setTrades((t) => {
-      saveState({
-        running: false,
-        config: null,
-        symbolCode: botRef.current.symbol?.code || null,
-        trades: t,
-        profitLoss: botRef.current.profitLoss,
-        wins: 0,
-        losses: 0,
-        operations: 0,
-        martingaleLevel: 0,
-        lastDirection: null,
-        directionCounter: directionCounter.current,
-      });
-      return t;
+    saveState({
+      running: false,
+      config: null,
+      symbolCode: botRef.current.symbol?.code || null,
+      trades: botRef.current.trades,
+      profitLoss: botRef.current.profitLoss,
+      wins: botRef.current.wins,
+      losses: botRef.current.losses,
+      operations: botRef.current.operations,
+      martingaleLevel: 0,
+      lastDirection: null,
+      directionCounter: directionCounter.current,
     });
   }, []);
 
   const updateCurrentPrice = useCallback((price: number) => {
     botRef.current.currentPrice = price;
-    setTrades((prev) =>
-      prev.map((t) =>
-        t.status === "open" ? { ...t, currentPrice: price } : t
-      )
+    const updated = botRef.current.trades.map((t) =>
+      t.status === "open" ? { ...t, currentPrice: price } : t
     );
+    botRef.current.trades = updated;
+    setTrades(updated);
   }, []);
 
   const waitUntilTimestamp = useCallback((targetTimestamp: number): Promise<void> => {
@@ -262,8 +261,10 @@ export const useTradingBot = () => {
           martingaleLevel: level,
         };
 
-        setTrades((prev) => [trade, ...prev]);
-        setOperations((prev) => prev + 1);
+        botRef.current.trades = [trade, ...botRef.current.trades];
+        botRef.current.operations += 1;
+        setTrades(botRef.current.trades);
+        setOperations(botRef.current.operations);
         setStatus("Ativo");
 
         const creditStr = result.user_credit;
@@ -317,24 +318,26 @@ export const useTradingBot = () => {
 
         console.log("[Bot] isWin:", isWin, "returnsCents:", returnsCents, "resultAmount:", resultAmount);
 
-        setTrades((prev) =>
-          prev.map((t) =>
-            t.id === result.transaction_id
-              ? {
-                  ...t,
-                  status: isWin ? ("win" as const) : ("loss" as const),
-                  result: isWin ? resultAmount : -trade.amount,
-                }
-              : t
-          )
+        const updatedTrades = botRef.current.trades.map((t) =>
+          t.id === result.transaction_id
+            ? {
+                ...t,
+                status: isWin ? ("win" as const) : ("loss" as const),
+                result: isWin ? resultAmount : -trade.amount,
+              }
+            : t
         );
+        botRef.current.trades = updatedTrades;
+        setTrades(updatedTrades);
 
         let newPL = botRef.current.profitLoss;
         if (isWin) {
-          setWins((prev) => prev + 1);
+          botRef.current.wins += 1;
+          setWins(botRef.current.wins);
           newPL += resultAmount;
         } else {
-          setLosses((prev) => prev + 1);
+          botRef.current.losses += 1;
+          setLosses(botRef.current.losses);
           newPL -= trade.amount;
         }
         setProfitLoss(newPL);
@@ -458,6 +461,10 @@ export const useTradingBot = () => {
       botRef.current.config = config;
       botRef.current.symbol = symbol;
       botRef.current.profitLoss = 0;
+      botRef.current.trades = [];
+      botRef.current.wins = 0;
+      botRef.current.losses = 0;
+      botRef.current.operations = 0;
 
       martingaleLevel.current = 0;
       lastDirection.current = null;
@@ -470,6 +477,7 @@ export const useTradingBot = () => {
       setWins(0);
       setLosses(0);
       setOperations(0);
+      setTrades([]);
       setCurrentMartingaleLevel(0);
       setIsMartingale(false);
 
@@ -483,12 +491,16 @@ export const useTradingBot = () => {
   const winRate = operations > 0 ? (wins / operations) * 100 : 0;
 
   const clearHistory = useCallback(() => {
+    botRef.current.trades = [];
+    botRef.current.profitLoss = 0;
+    botRef.current.wins = 0;
+    botRef.current.losses = 0;
+    botRef.current.operations = 0;
     setTrades([]);
     setProfitLoss(0);
     setWins(0);
     setLosses(0);
     setOperations(0);
-    botRef.current.profitLoss = 0;
     persistNow();
   }, [persistNow]);
 

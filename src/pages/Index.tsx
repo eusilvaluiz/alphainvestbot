@@ -5,7 +5,7 @@ import Header from "@/components/Header";
 import CandlestickChart from "@/components/CandlestickChart";
 import ControlPanel from "@/components/ControlPanel";
 import ConfigPanel from "@/components/ConfigPanel";
-import HistorySidebar, { HistoryDrawer } from "@/components/HistorySidebar";
+import HistoryModal from "@/components/HistoryModal";
 import LoginModal from "@/components/LoginModal";
 import AiAnalysisToast from "@/components/AiAnalysisToast";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,7 +13,7 @@ import { useTradingBot } from "@/hooks/useTradingBot";
 import { alphaApi, type Symbol as ApiSymbol } from "@/lib/api";
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState("terminal");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [currentPrice, setCurrentPrice] = useState(0);
   const { isLoggedIn, isBrokerConnected, brokerSession } = useAuth();
@@ -75,7 +75,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <SidebarNav activeTab={activeTab} onTabChange={setActiveTab} />
+      <SidebarNav onHistoryClick={() => setHistoryOpen(true)} />
 
       <div className="flex-1 ml-14 flex flex-col">
         <Header onLoginClick={() => setLoginOpen(true)} />
@@ -114,13 +114,10 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="w-72 border-l border-border p-4 hidden xl:block">
-            <HistorySidebar entries={bot.trades} onClearHistory={bot.clearHistory} />
-          </div>
         </div>
       </div>
 
-      <HistoryDrawer entries={bot.trades} onClearHistory={bot.clearHistory} />
+      <HistoryModal open={historyOpen} onOpenChange={setHistoryOpen} entries={bot.trades} onClearHistory={bot.clearHistory} />
       <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
       <AiAnalysisToast
         selectedSymbol={selectedSymbol}

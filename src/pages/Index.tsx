@@ -13,7 +13,7 @@ import { useTradingBot } from "@/hooks/useTradingBot";
 import { alphaApi, type Symbol as ApiSymbol } from "@/lib/api";
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState("terminal");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [currentPrice, setCurrentPrice] = useState(0);
   const { isLoggedIn, isBrokerConnected, brokerSession } = useAuth();

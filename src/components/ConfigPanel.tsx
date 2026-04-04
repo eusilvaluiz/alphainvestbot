@@ -209,7 +209,7 @@ const ConfigPanel = ({
                 setPosition(Math.min(10, Math.max(1, v)));
               }}
               disabled={isRunning}
-              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-foreground outline-none focus:border-yellow-500/50 transition-colors disabled:opacity-50"
+              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs font-bold text-foreground outline-none focus:border-yellow-500/50 transition-colors disabled:opacity-50"
             />
           ) : (
             <input

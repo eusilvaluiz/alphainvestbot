@@ -90,7 +90,7 @@ const Index = () => {
       <SidebarNav onHistoryClick={() => setHistoryOpen(true)} />
 
       <div className="flex-1 ml-0 sm:ml-14 flex flex-col">
-        <Header onLoginClick={() => setLoginOpen(true)} />
+        <Header onLoginClick={() => setLoginOpen(true)} onHistoryClick={() => setHistoryOpen(true)} />
 
         <div className="flex-1 flex">
           <div className="flex-1 p-4 space-y-4 overflow-y-auto">

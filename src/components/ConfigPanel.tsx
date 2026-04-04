@@ -176,7 +176,7 @@ const ConfigPanel = ({
       {/* Row 1: Entrada + Martingale */}
       <div className="grid grid-cols-2 gap-x-4">
         <div>
-          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 block">Entrada</label>
+          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 block h-4 leading-4">Entrada</label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">R$</span>
             <input
@@ -190,13 +190,13 @@ const ConfigPanel = ({
           </div>
         </div>
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Martingale</label>
+          <div className="flex items-center justify-between mb-1.5 h-4">
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wider leading-4">Martingale</label>
             <Switch
               checked={martingaleEnabled}
               onCheckedChange={setMartingaleEnabled}
               disabled={isRunning}
-              className="scale-75 origin-left"
+              className="scale-[0.6] origin-right"
             />
           </div>
           {martingaleEnabled ? (
@@ -212,7 +212,12 @@ const ConfigPanel = ({
               className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-foreground outline-none focus:border-yellow-500/50 transition-colors disabled:opacity-50"
             />
           ) : (
-            <div className="py-2 text-xs text-muted-foreground">Desativado</div>
+            <input
+              type="text"
+              disabled
+              value="Desativado"
+              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-muted-foreground outline-none disabled:opacity-50"
+            />
           )}
         </div>
       </div>

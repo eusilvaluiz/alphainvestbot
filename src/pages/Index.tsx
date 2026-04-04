@@ -75,7 +75,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <SidebarNav activeTab={activeTab} onTabChange={setActiveTab} />
+      <SidebarNav onHistoryClick={() => setHistoryOpen(true)} />
 
       <div className="flex-1 ml-14 flex flex-col">
         <Header onLoginClick={() => setLoginOpen(true)} />

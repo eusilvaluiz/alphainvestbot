@@ -260,11 +260,10 @@ const ConfigPanel = ({
       {isRunning ? (
         <button
           onClick={onStop}
-          disabled={isProcessing}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-heading font-bold text-sm uppercase tracking-wider bg-gradient-to-r from-chart-red to-red-600 text-white shadow-lg shadow-chart-red/20 hover:shadow-chart-red/40 transition-all duration-300 disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-heading font-bold text-sm uppercase tracking-wider bg-gradient-to-r from-chart-red to-red-600 text-white shadow-lg shadow-chart-red/20 hover:shadow-chart-red/40 transition-all duration-300"
         >
           <Square size={16} />
-          {isProcessing ? "Processando..." : "Parar Bot"}
+          {isProcessing ? "Parar Bot Agora" : "Parar Bot"}
         </button>
       ) : (
         <div className="flex gap-2">

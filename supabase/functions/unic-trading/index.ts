@@ -95,23 +95,19 @@ async function doLogin(brokerUser: string, brokerPass: string): Promise<SessionD
     if (accountMatch) {
       accountId = parseInt(accountMatch[1]);
     }
-    // Also try the accounts data
     if (!accountId) {
       const accMatch = trHtml.match(/"id"\s*:\s*(\d+)\s*,\s*"amount"/);
       if (accMatch) accountId = parseInt(accMatch[1]);
     }
-     // Try more patterns for account ID
-     if (!accountId) {
-       const accMatch2 = trHtml.match(/account_id['":\s]+(\d+)/);
-       if (accMatch2) accountId = parseInt(accMatch2[1]);
-     }
-     if (!accountId) {
-       const accMatch3 = trHtml.match(/"accounts"\s*:\s*\[\s*\{[^}]*"id"\s*:\s*(\d+)/);
-       if (accMatch3) accountId = parseInt(accMatch3[1]);
-     }
-     // Default to 0 if not found (valid for some accounts)
-     if (accountId === null) accountId = 0;
-     console.log("doLogin accountId:", accountId);
+    if (!accountId) {
+      const accMatch2 = trHtml.match(/account_id['":\s]+(\d+)/);
+      if (accMatch2) accountId = parseInt(accMatch2[1]);
+    }
+    if (!accountId) {
+      const accMatch3 = trHtml.match(/"accounts"\s*:\s*\[\s*\{[^}]*"id"\s*:\s*(\d+)/);
+      if (accMatch3) accountId = parseInt(accMatch3[1]);
+    }
+    console.log("doLogin accountId from HTML:", accountId);
 
     // Merge traderoom cookies
     const trSetCookies = (trRes.headers as any).getSetCookie?.() as string[] | undefined;
@@ -126,6 +122,28 @@ async function doLogin(brokerUser: string, brokerPass: string): Promise<SessionD
     const finalCookies = Array.from(cookieMap.values()).join("; ");
     const newXsrf = cookieMap.get("XSRF-TOKEN");
     const finalXsrf = newXsrf ? decodeURIComponent(newXsrf.split("=").slice(1).join("=")) : xsrfToken;
+
+    // If accountId not found in HTML, try fetching from accounts API
+    if (!accountId) {
+      try {
+        const tmpSession: SessionData = { cookies: finalCookies, xsrf: finalXsrf, accountId: null };
+        const accRes = await fetch(`${UNIC_BASE}/binary/accounts`, {
+          headers: makeHeaders(tmpSession),
+        });
+        const accData = await accRes.json();
+        console.log("Accounts API response:", JSON.stringify(accData).substring(0, 300));
+        if (Array.isArray(accData) && accData.length > 0) {
+          accountId = accData[0].id;
+        } else if (accData.data && Array.isArray(accData.data) && accData.data.length > 0) {
+          accountId = accData.data[0].id;
+        } else if (accData.id) {
+          accountId = accData.id;
+        }
+        console.log("doLogin accountId from API:", accountId);
+      } catch (e) {
+        console.error("Failed to get accountId from API:", e);
+      }
+    }
 
     return { cookies: finalCookies, xsrf: finalXsrf, accountId };
   } catch (error) {
@@ -399,60 +417,98 @@ async function handleTransaction(session: SessionData, transactionId: number) {
   let transaction: any = null;
 
   try {
-    // Get first page to learn pagination
-    const firstRes = await fetch(`${UNIC_BASE}/binary/history/1`, {
+    // Try fetching history with and without account_id
+    const accountId = session.accountId;
+    const historyUrl = accountId
+      ? `${UNIC_BASE}/binary/history/1?account_id=${accountId}`
+      : `${UNIC_BASE}/binary/history/1`;
+
+    const firstRes = await fetch(historyUrl, {
       headers: makeHeaders(session),
     });
     const firstData = await firstRes.json();
+    
+    console.log("History response keys:", Object.keys(firstData), "status:", firstData.status);
+    
     const limit = firstData.limit ?? 10;
     const total = firstData.total ?? 0;
     const totalPages = firstData.last_page ?? (Math.ceil(total / limit) || 1);
 
-    console.log("History: pages=", totalPages, "total=", total, "target:", transactionId);
+    console.log("History: pages=", totalPages, "total=", total, "target:", transactionId, "accountId:", accountId);
 
-    // Search from last page backwards (most recent first)
-    for (let page = totalPages; page >= Math.max(1, totalPages - 5) && !transaction; page--) {
-      const data = page === 1 ? firstData : await (await fetch(`${UNIC_BASE}/binary/history/${page}`, { headers: makeHeaders(session) })).json();
-      const txList = data.data || data.transactions?.data || data.transactions || [];
-
-      if (Array.isArray(txList)) {
-        for (const tx of txList) {
-          if (tx.id === transactionId || tx.transaction_id === transactionId) {
-            transaction = tx;
-            console.log("Found tx:", JSON.stringify(tx).substring(0, 500));
-            break;
-          }
-        }
+    // If no results with account_id, try without
+    if (total === 0 && accountId) {
+      const retryRes = await fetch(`${UNIC_BASE}/binary/history/1`, {
+        headers: makeHeaders(session),
+      });
+      const retryData = await retryRes.json();
+      console.log("History retry without account_id: total=", retryData.total);
+      
+      if ((retryData.total ?? 0) > 0) {
+        return searchInHistory(session, retryData, transactionId);
       }
+    }
+
+    if (total > 0) {
+      return searchInHistory(session, firstData, transactionId);
     }
   } catch (e) {
     console.error("History error:", e);
   }
 
-  if (!transaction) {
-    return {
+  return makePendingResult(transactionId);
+}
+
+function makePendingResult(transactionId: number) {
+  return {
+    date: new Date().toISOString(),
+    status: "pending",
+    transaction: {
+      id: transactionId,
       date: new Date().toISOString(),
-      status: "pending",
-      transaction: {
-        id: transactionId,
-        date: new Date().toISOString(),
-        status: "Pendente",
-        status_id: 0,
-        direction: 0,
-        symbol: "",
-        symbol_price: "0",
-        amount: "0",
-        amount_cents: 0,
-        amount_percent: 0,
-        returns: "0",
-        returns_cents: 0,
-        profit_cents: 0,
-        expiration: 0,
-        expiration_date: "",
-        notes: "",
-        user: { id: 0, login: "", balance: "0", balance_cents: 0 },
-      },
-    };
+      status: "Pendente",
+      status_id: 0,
+      direction: 0,
+      symbol: "",
+      symbol_price: "0",
+      amount: "0",
+      amount_cents: 0,
+      amount_percent: 0,
+      returns: "0",
+      returns_cents: 0,
+      profit_cents: 0,
+      expiration: 0,
+      expiration_date: "",
+      notes: "",
+      user: { id: 0, login: "", balance: "0", balance_cents: 0 },
+    },
+  };
+}
+
+async function searchInHistory(session: SessionData, firstPageData: any, transactionId: number) {
+  const limit = firstPageData.limit ?? 10;
+  const total = firstPageData.total ?? 0;
+  const totalPages = firstPageData.last_page ?? (Math.ceil(total / limit) || 1);
+  let transaction: any = null;
+
+  // Search from last page backwards (most recent first)
+  for (let page = totalPages; page >= Math.max(1, totalPages - 5) && !transaction; page--) {
+    const data = page === 1 ? firstPageData : await (await fetch(`${UNIC_BASE}/binary/history/${page}`, { headers: makeHeaders(session) })).json();
+    const txList = data.data || data.transactions?.data || data.transactions || [];
+
+    if (Array.isArray(txList)) {
+      for (const tx of txList) {
+        if (tx.id === transactionId || tx.transaction_id === transactionId) {
+          transaction = tx;
+          console.log("Found tx:", JSON.stringify(tx).substring(0, 500));
+          break;
+        }
+      }
+    }
+  }
+
+  if (!transaction) {
+    return makePendingResult(transactionId);
   }
 
   // Parse amounts — broker uses "return" field as "37,00" format
@@ -463,7 +519,7 @@ async function handleTransaction(session: SessionData, transactionId: number) {
   const returnCents = Math.round(returnFloat * 100);
   const amountCents = transaction.amount_cents ?? Math.round(amountFloat * 100);
 
-  // Determine outcome by comparing return vs amount (most reliable)
+  // Determine outcome by comparing return vs amount
   let outcome: "Ganhou" | "Perdeu" | "Empatou" | "Pendente";
   let statusId: number;
 

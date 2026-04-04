@@ -41,6 +41,46 @@ interface PersistedBotState {
 }
 
 const STORAGE_KEY = "alpha_bot_state";
+const CANDLE_SECONDS = 60;
+const ENTRY_GRACE_SECONDS = 1;
+
+const nowInSeconds = () => Math.floor(Date.now() / 1000);
+
+const getCurrentOrNextCandleOpen = (referenceTimestamp: number) => {
+  const normalized = Math.floor(referenceTimestamp);
+  return normalized % CANDLE_SECONDS === 0
+    ? normalized
+    : Math.floor(normalized / CANDLE_SECONDS) * CANDLE_SECONDS + CANDLE_SECONDS;
+};
+
+const getStrictNextCandleOpen = (referenceTimestamp: number) => {
+  const normalized = Math.floor(referenceTimestamp);
+  return Math.floor(normalized / CANDLE_SECONDS) * CANDLE_SECONDS + CANDLE_SECONDS;
+};
+
+const getFollowUpEntryTimestamp = (expirationTimestamp: number) => {
+  const now = nowInSeconds();
+  return now <= expirationTimestamp + ENTRY_GRACE_SECONDS
+    ? expirationTimestamp
+    : getStrictNextCandleOpen(now);
+};
+
+const getTradeOutcomeFromPrice = (
+  trade: TradeEntry,
+  closePrice: number,
+  odd: number
+) => {
+  const normalizedOdd = Number.isFinite(odd) ? odd : 0;
+  const isWin = trade.direction === "up"
+    ? closePrice > trade.entryPrice
+    : closePrice < trade.entryPrice;
+  const profitAmount = Number(((trade.amount * normalizedOdd) / 100).toFixed(2));
+
+  return {
+    isWin,
+    resultAmount: isWin ? profitAmount : -trade.amount,
+  };
+};
 
 function loadState(): PersistedBotState | null {
   try {
@@ -51,7 +91,7 @@ function loadState(): PersistedBotState | null {
     // Clean up stale "open" or "processing" trades that already expired
     // Only mark as loss visually — do NOT touch profitLoss since these were
     // orphaned by crashes, not real settled losses
-    const now = Math.floor(Date.now() / 1000);
+    const now = nowInSeconds();
     state.trades = state.trades.map((t) => {
       if ((t.status === "open" || t.status === "processing") && t.expirationTimestamp && now >= t.expirationTimestamp + 30) {
         return { ...t, status: "loss" as const, result: t.result ?? 0 };
@@ -181,13 +221,13 @@ export const useTradingBot = () => {
 
   const waitUntilTimestamp = useCallback((targetTimestamp: number, respectRunning = true): Promise<void> => {
     return new Promise((resolve) => {
-      const now = Math.floor(Date.now() / 1000);
+      const now = nowInSeconds();
       if (now >= targetTimestamp || (respectRunning && !botRef.current.running)) {
         resolve();
         return;
       }
       const checkInterval = setInterval(() => {
-        const now = Math.floor(Date.now() / 1000);
+        const now = nowInSeconds();
         if (now >= targetTimestamp || (respectRunning && !botRef.current.running)) {
           clearInterval(checkInterval);
           resolve();
@@ -205,13 +245,15 @@ export const useTradingBot = () => {
   );
 
   const getNextCandleOpenTimestamp = useCallback((referenceTimestamp: number): number => {
-    return referenceTimestamp % 60 === 0
-      ? referenceTimestamp
-      : Math.floor(referenceTimestamp / 60) * 60 + 60;
+    return getCurrentOrNextCandleOpen(referenceTimestamp);
+  }, []);
+
+  const getStrictNextCandleOpenTimestamp = useCallback((referenceTimestamp: number): number => {
+    return getStrictNextCandleOpen(referenceTimestamp);
   }, []);
 
   const getFirstEntryTimestamp = useCallback((): number => {
-    const now = Math.floor(Date.now() / 1000);
+    const now = nowInSeconds();
     return getNextCandleOpenTimestamp(now);
   }, [getNextCandleOpenTimestamp]);
 
@@ -228,6 +270,18 @@ export const useTradingBot = () => {
 
         await waitUntilTimestamp(entryTimestamp);
         if (!botRef.current.running) return;
+
+        const entryDelaySeconds = nowInSeconds() - entryTimestamp;
+        if (entryDelaySeconds > ENTRY_GRACE_SECONDS) {
+          const retryTimestamp = getStrictNextCandleOpenTimestamp(nowInSeconds());
+          setIsProcessing(false);
+          setStatus("Aguardando próxima candle...");
+          persistNow();
+          if (botRef.current.running) {
+            void executeTradeCycle(config, symbol, retryTimestamp);
+          }
+          return;
+        }
 
         const level = martingaleLevel.current;
         const isMartingaleEntry = level > 0 && lastDirection.current;
@@ -285,51 +339,24 @@ export const useTradingBot = () => {
 
         await waitForExpiration(result.expiration_timestamp);
 
-        const processingTrades = botRef.current.trades.map((t) =>
-          t.id === result.transaction_id ? { ...t, status: "processing" as const } : t
+        const closePrice = botRef.current.currentPrice > 0
+          ? botRef.current.currentPrice
+          : trade.currentPrice > 0
+            ? trade.currentPrice
+            : trade.entryPrice;
+        const { isWin, resultAmount } = getTradeOutcomeFromPrice(
+          trade,
+          closePrice,
+          result.odd
         );
-        botRef.current.trades = processingTrades;
-        setTrades(processingTrades);
-        persistNow();
-
-        if (botRef.current.running) {
-          setIsProcessing(true);
-          setStatus("Verificando...");
-        }
-
-        let settlement: Awaited<ReturnType<typeof alphaApi.getSettlement>> | null = null;
-        let txn: Awaited<ReturnType<typeof alphaApi.getTransaction>> | null = null;
-
-        settlement = await alphaApi.getSettlement();
-        txn = await alphaApi.getTransaction(result.transaction_id);
-        let settled = txn.transaction.status_id === 1 || txn.transaction.status_id === 2;
-
-        if (!settled) {
-          for (let attempt = 0; attempt < 30; attempt += 1) {
-            await new Promise((r) => setTimeout(r, attempt < 5 ? 80 : 150));
-            settlement = await alphaApi.getSettlement();
-            txn = await alphaApi.getTransaction(result.transaction_id);
-            const statusId = txn.transaction.status_id;
-            if (statusId === 1 || statusId === 2) {
-              settled = true;
-              break;
-            }
-          }
-        }
-
-        if (!settlement || !txn) return;
-
-        const balanceData = await alphaApi.getBalance();
-        const returnsCents = txn.transaction.returns_cents;
-        const isWin = returnsCents > 0;
-        const resultAmount = returnsCents / 100;
 
         const updatedTrades = botRef.current.trades.map((t) =>
           t.id === result.transaction_id
             ? {
                 ...t,
+                currentPrice: closePrice,
                 status: isWin ? ("win" as const) : ("loss" as const),
-                result: isWin ? resultAmount : -trade.amount,
+                result: resultAmount,
               }
             : t
         );
@@ -348,7 +375,7 @@ export const useTradingBot = () => {
         } else {
           botRef.current.losses += 1;
           setLosses(botRef.current.losses);
-          newPL -= trade.amount;
+          newPL += resultAmount;
 
           if (martingaleLevel.current < config.position) {
             martingaleLevel.current += 1;
@@ -365,17 +392,19 @@ export const useTradingBot = () => {
         setProfitLoss(newPL);
         botRef.current.profitLoss = newPL;
 
-        setBalance(balanceData.credit_cents / 100);
-        alphaApi.updateSessionCredit(
-          balanceData.credit,
-          balanceData.credit_cents
-        );
-
         setIsProcessing(false);
         if (botRef.current.running) {
           setStatus("Aguardando candle...");
         }
         persistNow();
+
+        void alphaApi.getBalance().then((balanceData) => {
+          setBalance(balanceData.credit_cents / 100);
+          alphaApi.updateSessionCredit(
+            balanceData.credit,
+            balanceData.credit_cents
+          );
+        }).catch(() => {});
 
         if (newPL <= -config.stopLoss) {
           setStatus("Stop Loss");
@@ -390,7 +419,7 @@ export const useTradingBot = () => {
         }
 
         if (botRef.current.running) {
-          const nextEntryTimestamp = getNextCandleOpenTimestamp(result.expiration_timestamp);
+          const nextEntryTimestamp = getFollowUpEntryTimestamp(result.expiration_timestamp);
           persistNow();
           void executeTradeCycle(config, symbol, nextEntryTimestamp);
         }
@@ -399,7 +428,7 @@ export const useTradingBot = () => {
         setIsProcessing(false);
         if (botRef.current.running) {
           setStatus("Aguardando candle...");
-          const retryTimestamp = getNextCandleOpenTimestamp(Math.floor(Date.now() / 1000));
+          const retryTimestamp = getStrictNextCandleOpenTimestamp(nowInSeconds());
           void executeTradeCycle(config, symbol, retryTimestamp);
         }
       }
@@ -438,19 +467,19 @@ export const useTradingBot = () => {
       );
 
       if (pendingTrade) {
-        const now = Math.floor(Date.now() / 1000);
+        const now = nowInSeconds();
         if (now < pendingTrade.expirationTimestamp) {
           setStatus("Ativo");
-          const nextEntry = getNextCandleOpenTimestamp(pendingTrade.expirationTimestamp);
+          const nextEntry = getStrictNextCandleOpenTimestamp(pendingTrade.expirationTimestamp);
           void executeTradeCycle(saved.config, sym, nextEntry);
           return;
         }
       }
 
-      const nextEntry = getNextCandleOpenTimestamp(Math.floor(Date.now() / 1000));
+      const nextEntry = getStrictNextCandleOpenTimestamp(nowInSeconds());
       void executeTradeCycle(saved.config, sym, nextEntry);
     },
-    [brokerSession, executeTradeCycle, getNextCandleOpenTimestamp]
+    [brokerSession, executeTradeCycle, getStrictNextCandleOpenTimestamp]
   );
 
   const startBot = useCallback(

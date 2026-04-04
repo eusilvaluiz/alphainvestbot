@@ -322,7 +322,7 @@ export const useTradingBot = () => {
           }
         }
 
-        if (!botRef.current.running || !settlement || !txn) return;
+        if (!settlement || !txn) return;
 
         const balanceData = await alphaApi.getBalance();
         

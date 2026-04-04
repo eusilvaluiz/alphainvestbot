@@ -100,6 +100,16 @@ async function doLogin(brokerUser: string, brokerPass: string): Promise<SessionD
       const accMatch = trHtml.match(/"id"\s*:\s*(\d+)\s*,\s*"amount"/);
       if (accMatch) accountId = parseInt(accMatch[1]);
     }
+     // Try more patterns for account ID
+     if (!accountId) {
+       const accMatch2 = trHtml.match(/account_id['":\s]+(\d+)/);
+       if (accMatch2) accountId = parseInt(accMatch2[1]);
+     }
+     if (!accountId) {
+       const accMatch3 = trHtml.match(/"accounts"\s*:\s*\[\s*\{[^}]*"id"\s*:\s*(\d+)/);
+       if (accMatch3) accountId = parseInt(accMatch3[1]);
+     }
+     console.log("doLogin accountId extracted:", accountId);
 
     // Merge traderoom cookies
     const trSetCookies = (trRes.headers as any).getSetCookie?.() as string[] | undefined;
@@ -384,20 +394,37 @@ async function handleSettlement(session: SessionData) {
 
 /** GET /transaction/{id} — Get transaction details */
 async function handleTransaction(session: SessionData, transactionId: number) {
-  // Use history endpoint or refresh to get transaction status
-  const res = await fetch(`${UNIC_BASE}/binary/history/1`, {
-    headers: makeHeaders(session),
-  });
-
-  const data = await res.json();
-
-  // Find the specific transaction
-  let transaction = null;
-  const txList = data.transactions?.data || data.data || [];
-  for (const tx of txList) {
-    if (tx.id === transactionId) {
-      transaction = tx;
-      break;
+   // Try multiple history pages to find the transaction
+   let transaction: any = null;
+ 
+   for (let page = 1; page <= 3 && !transaction; page++) {
+     try {
+       const res = await fetch(`${UNIC_BASE}/binary/history/${page}`, {
+         headers: makeHeaders(session),
+       });
+       const data = await res.json();
+ 
+       if (page === 1) {
+         console.log("History page 1 raw keys:", Object.keys(data), "status:", data.status);
+         const txList = data.transactions?.data || data.data || data.transactions || [];
+         console.log("History txList length:", Array.isArray(txList) ? txList.length : "not-array", "looking for:", transactionId);
+         if (Array.isArray(txList) && txList.length > 0) {
+           console.log("First tx sample:", JSON.stringify(txList[0]).substring(0, 300));
+         }
+       }
+ 
+       const txList = data.transactions?.data || data.data || data.transactions || [];
+       if (Array.isArray(txList)) {
+         for (const tx of txList) {
+           if (tx.id === transactionId || tx.transaction_id === transactionId) {
+             transaction = tx;
+             console.log("Found transaction:", JSON.stringify(tx).substring(0, 500));
+             break;
+           }
+         }
+       }
+     } catch (e) {
+       console.error(`History page ${page} error:`, e);
     }
   }
 
@@ -428,7 +455,20 @@ async function handleTransaction(session: SessionData, transactionId: number) {
   }
 
   // Map UnicBroker status to expected format
-  const statusId = transaction.status_id ?? (transaction.status === "Ganhou" ? 2 : transaction.status === "Perdeu" ? 1 : 0);
+   const statusText = String(transaction.status || "").toLowerCase();
+   let statusId = transaction.status_id;
+   if (statusId == null || statusId === undefined) {
+     if (statusText.includes("ganh") || statusText.includes("win")) statusId = 2;
+     else if (statusText.includes("perd") || statusText.includes("loss")) statusId = 1;
+     else if (statusText.includes("empat") || statusText.includes("draw") || statusText.includes("devolv") || statusText.includes("refund")) statusId = 3;
+     else statusId = 0;
+   }
+ 
+   // Detect draw by returns == amount (money refunded)
+   const returnsCents = transaction.returns_cents ?? transaction.amount_result_cents ?? 0;
+   const amountCents = transaction.amount_cents ?? 0;
+   const isDraw = statusId === 3 || (statusId !== 1 && statusId !== 2 && returnsCents === amountCents && amountCents > 0);
+   if (isDraw) statusId = 3;
 
   return {
     date: transaction.date ?? new Date().toISOString(),
@@ -436,7 +476,7 @@ async function handleTransaction(session: SessionData, transactionId: number) {
     transaction: {
       id: transaction.id,
       date: transaction.date ?? "",
-      status: statusId === 2 ? "Ganhou" : statusId === 1 ? "Perdeu" : "Pendente",
+       status: statusId === 2 ? "Ganhou" : statusId === 1 ? "Perdeu" : statusId === 3 ? "Empatou" : "Pendente",
       status_id: statusId,
       direction: transaction.direction ?? 0,
       symbol: transaction.symbol ?? "",
@@ -445,7 +485,7 @@ async function handleTransaction(session: SessionData, transactionId: number) {
       amount_cents: transaction.amount_cents ?? 0,
       amount_percent: transaction.amount_percent ?? 0,
       returns: transaction.returns ?? "0",
-      returns_cents: transaction.returns_cents ?? 0,
+       returns_cents: returnsCents,
       expiration: transaction.expiration ?? 0,
       expiration_date: transaction.expiration_date ?? "",
       notes: transaction.notes ?? "",

@@ -13,7 +13,7 @@ const SidebarNav = ({ onHistoryClick }: SidebarNavProps) => {
   const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-14 flex flex-col items-center py-4 bg-background border-r border-border z-50">
+    <aside className="fixed left-0 top-0 h-full w-14 hidden sm:flex flex-col items-center py-4 bg-background border-r border-border z-50">
       <button
         onClick={onHistoryClick}
         className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors mb-4"

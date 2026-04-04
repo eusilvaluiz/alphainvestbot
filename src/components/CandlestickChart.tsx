@@ -603,11 +603,11 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         </div>
 
         {/* Center: price + stats inline */}
-        <div className="flex items-center gap-4">
-          <span className="text-lg font-heading font-bold text-foreground">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          <span className="text-sm sm:text-lg font-heading font-bold text-foreground whitespace-nowrap">
             ${currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
-          <div className="hidden sm:flex items-center gap-3 text-xs">
+          <div className="hidden md:flex items-center gap-3 text-xs">
             <div className="flex items-center gap-1">
               <span className="text-muted-foreground">A:</span>
               <span className="text-foreground font-medium">${stats.open.toFixed(2)}</span>
@@ -628,15 +628,13 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         </div>
 
         {/* Right: candle countdown + status */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className={`text-sm font-mono font-bold ${candleCountdown <= 10 ? "text-chart-red" : "text-chart-green"}`}>
-              {formatCountdown(candleCountdown)}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${statusColor} animate-pulse-glow`} />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <span className={`text-xs sm:text-sm font-mono font-bold ${candleCountdown <= 10 ? "text-chart-red" : "text-chart-green"}`}>
+            {formatCountdown(candleCountdown)}
+          </span>
+          <div className="flex items-center gap-1">
+            <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${statusColor} animate-pulse-glow`} />
+            <span className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-wider hidden sm:inline">
               {statusLabel}
             </span>
           </div>

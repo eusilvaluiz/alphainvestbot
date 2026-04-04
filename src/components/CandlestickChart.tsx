@@ -612,15 +612,12 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
             </div>
           </div>
           {showDropdown && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)} />
-              <SymbolPickerModal
-                symbols={symbols}
-                selectedSymbol={selectedSymbol}
-                onSelect={(s) => { onSymbolChange(s); setShowDropdown(false); }}
-                onClose={() => setShowDropdown(false)}
-              />
-            </>
+            <SymbolPickerModal
+              symbols={symbols}
+              selectedSymbol={selectedSymbol}
+              onSelect={(s) => { onSymbolChange(s); setShowDropdown(false); }}
+              onClose={() => setShowDropdown(false)}
+            />
           )}
         </div>
 

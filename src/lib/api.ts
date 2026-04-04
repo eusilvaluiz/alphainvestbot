@@ -154,13 +154,26 @@ class AlphaApi {
     return this.session;
   }
 
+  private getBaseHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (!IS_DEV && SUPABASE_KEY) {
+      headers["apikey"] = SUPABASE_KEY;
+    }
+    return headers;
+  }
+
   private getAuthHeaders(): Record<string, string> {
     const session = this.getSession();
     if (!session) throw new Error("Not authenticated");
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session.accessToken}`,
-    };
+    const headers = this.getBaseHeaders();
+    if (IS_DEV) {
+      headers["Authorization"] = `Bearer ${session.accessToken}`;
+    } else {
+      headers["x-alpha-token"] = session.accessToken;
+    }
+    return headers;
   }
 
   isLoggedIn(): boolean {

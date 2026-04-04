@@ -314,7 +314,6 @@ export const useTradingBot = () => {
         if (!settled) {
           // Poll with short intervals if not ready yet
           for (let attempt = 0; attempt < 30; attempt += 1) {
-            if (!botRef.current.running) return;
             await new Promise((r) => setTimeout(r, attempt < 5 ? 80 : 150));
             settlement = await alphaApi.getSettlement();
             txn = await alphaApi.getTransaction(result.transaction_id);

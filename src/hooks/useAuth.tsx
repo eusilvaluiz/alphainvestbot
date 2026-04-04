@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { alphaApi, type UserSession } from "@/lib/api";
 import type { Session, User } from "@supabase/supabase-js";
@@ -45,9 +45,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [brokerSession, setBrokerSession] = useState<UserSession | null>(null);
   const [brokerLoading, setBrokerLoading] = useState(false);
   const [brokerError, setBrokerError] = useState<string | null>(null);
+  const reAuthRef = useRef(false);
+  const authenticateRef = useRef<((user: string, pass: string) => Promise<void>) | null>(null);
 
   useEffect(() => {
     const applyAuthState = (nextSession: Session | null) => {
+      if (reAuthRef.current) return;
+
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
       setLoading(false);
@@ -57,10 +61,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      const hasLocalBrokerCredentials = !!localStorage.getItem("broker_credentials");
-      const hasLocalBrokerSession = !!localStorage.getItem("alpha_session");
-
-      if (hasLocalBrokerCredentials || hasLocalBrokerSession) {
+      // Session dropped — try silent re-login if we have broker credentials
+      const storedCreds = localStorage.getItem("broker_credentials");
+      if (storedCreds) {
+        try {
+          const creds = JSON.parse(storedCreds);
+          reAuthRef.current = true;
+          console.log("[Auth] Session expired, attempting silent re-login...");
+          const doReAuth = authenticateRef.current;
+          if (doReAuth) {
+            doReAuth(creds.user, creds.pass)
+              .then(() => console.log("[Auth] Silent re-login succeeded"))
+              .catch((e) => {
+                console.error("[Auth] Silent re-login failed:", e);
+                // Don't clear broker session — edge functions work without JWT
+              })
+              .finally(() => { reAuthRef.current = false; });
+          } else {
+            reAuthRef.current = false;
+          }
+        } catch {
+          reAuthRef.current = false;
+        }
         return;
       }
 

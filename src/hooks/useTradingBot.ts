@@ -364,7 +364,7 @@ export const useTradingBot = () => {
            const txData = await alphaApi.getTransaction(result.transaction_id);
            if (txData.status === "success" && txData.transaction.status !== "Pendente") {
              const tx = txData.transaction;
-             console.log("[Bot] Broker result:", tx.status, "returns_cents:", tx.returns_cents, "amount_cents:", tx.amount_cents);
+             console.log("[Bot] Broker result:", tx.status, "profit_cents:", tx.profit_cents, "returns_cents:", tx.returns_cents, "amount_cents:", tx.amount_cents);
 
              if (tx.symbol_price && tx.symbol_price !== "0") {
                realClosePrice = Number(tx.symbol_price);
@@ -372,8 +372,8 @@ export const useTradingBot = () => {
 
              if (tx.status === "Ganhou") {
                outcome = "win";
-               resultAmount = tx.returns_cents > 0
-                 ? tx.returns_cents / 100
+               resultAmount = typeof tx.profit_cents === "number"
+                 ? tx.profit_cents / 100
                  : Number(((result.odd > 10 ? trade.amount * result.odd / 100 : trade.amount * (result.odd - 1))).toFixed(2));
              } else if (tx.status === "Empatou") {
                outcome = "draw";

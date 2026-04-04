@@ -66,6 +66,10 @@
     font-family: var(--font-body);
   }
 
+  html, body, #root {
+    min-height: 100%;
+  }
+
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);
   }
@@ -103,5 +107,18 @@
   }
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
+  [data-allow-pinch-zoom="true"] {
+    touch-action: pan-x pan-y pinch-zoom;
   }
 }

@@ -575,16 +575,27 @@ serve(async (req) => {
         result = await handleLogin(session);
         break;
       case "open-position": {
-        // Refresh XSRF before POST to avoid 419
+        // Always do a full fresh login before opening position to avoid stale session issues
+        if (broker_user && broker_pass) {
+          console.log("Fresh login before open-position");
+          const freshSession = await doLogin(broker_user, broker_pass);
+          if (freshSession) {
+            session = freshSession;
+          } else {
+            console.error("Fresh login failed, using existing session");
+          }
+        }
         session = await refreshXsrf(session);
         try {
           result = await handleOpenPosition(session, symbol, direction, amount, price);
         } catch (e: any) {
-          // If CSRF mismatch, full re-login and retry once
-          if (e.message?.includes("CSRF") && broker_user && broker_pass) {
-            console.log("CSRF mismatch, full re-login and retry");
+          // If auth/CSRF error, full re-login and retry once
+          const msg = e.message || "";
+          if ((msg.includes("CSRF") || msg.includes("Acesse sua conta") || msg.includes("401")) && broker_user && broker_pass) {
+            console.log("Auth error, full re-login and retry:", msg);
             session = await doLogin(broker_user, broker_pass);
             if (!session) throw new Error("Re-login failed");
+            session = await refreshXsrf(session);
             result = await handleOpenPosition(session, symbol, direction, amount, price);
           } else {
             throw e;

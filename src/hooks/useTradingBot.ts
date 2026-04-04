@@ -74,7 +74,13 @@ const getTradeOutcomeFromPrice = (
   const isWin = trade.direction === "up"
     ? closePrice > trade.entryPrice
     : closePrice < trade.entryPrice;
-  const profitAmount = Number(((trade.amount * normalizedOdd) / 100).toFixed(2));
+  // odd comes as a multiplier (e.g. 1.80 = 80% profit) or as percentage (e.g. 80)
+  const profitAmount = Number(
+    (normalizedOdd > 10
+      ? (trade.amount * normalizedOdd) / 100   // percentage: 80 → 80%
+      : trade.amount * (normalizedOdd - 1)      // multiplier: 1.80 → 80%
+    ).toFixed(2)
+  );
 
   return {
     isWin,

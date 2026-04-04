@@ -446,7 +446,9 @@ async function handleTransaction(session: SessionData, transactionId: number) {
       const sData = await sRes.json();
       console.log("Settlement check for tx", transactionId, ":", JSON.stringify(sData).substring(0, 400));
 
-      const hasConfirmedUpdate = sData.updated === 1;
+      const hasConfirmedUpdate = typeof sData.updated === "number"
+        ? sData.updated > 0
+        : false;
       const resultCents = typeof sData.amount_result_cents === "number"
         ? sData.amount_result_cents
         : null;

@@ -198,7 +198,8 @@ export const useTradingBot = () => {
 
   const waitForExpiration = useCallback(
     (expirationTimestamp: number): Promise<void> => {
-      return waitUntilTimestamp(expirationTimestamp);
+      // Always wait for the full expiration — never abort early even if bot is stopped
+      return waitUntilTimestamp(expirationTimestamp, false);
     },
     [waitUntilTimestamp]
   );

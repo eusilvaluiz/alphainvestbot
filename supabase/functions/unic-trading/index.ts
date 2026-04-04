@@ -148,8 +148,14 @@ async function handleSymbols(session: SessionData) {
   const data = await res.json();
 
   if (data.status !== "success" || !data.symbols) {
+    console.error("Symbols response:", JSON.stringify(data).substring(0, 500));
     return { status: "error", symbols: [] };
   }
+
+  // symbols may be an array or an object keyed by id
+  const symbolsList = Array.isArray(data.symbols)
+    ? data.symbols
+    : Object.values(data.symbols);
 
   // Transform to match the expected format
   const symbols = data.symbols.map((s: any) => ({

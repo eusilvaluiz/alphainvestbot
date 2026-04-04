@@ -146,9 +146,7 @@ Deno.serve(async (req) => {
       credit_cents: creditsData.credit_cents ?? 0,
     };
 
-    if (!brokerResponse.ok || brokerData?.status !== "success" || !brokerData?.access_token) {
-      return json({ error: "Usuário ou senha inválidos" });
-    }
+    // brokerData is already validated above (error cases return early)
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },

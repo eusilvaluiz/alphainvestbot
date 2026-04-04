@@ -109,3 +109,16 @@
     display: none;
   }
 }
+
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
+  [data-allow-pinch-zoom="true"] {
+    touch-action: pan-x pan-y pinch-zoom;
+  }
+}

@@ -660,7 +660,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         </div>
       </div>
 
-      <div ref={chartContainerRef} className="w-full" />
+      <div ref={chartContainerRef} className="w-full" data-allow-pinch-zoom="true" />
     </div>
   );
 };

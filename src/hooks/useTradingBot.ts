@@ -100,6 +100,65 @@ const getTradeOutcomeFromPrice = (
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+const RESULT_POLL_DELAYS_MS = [400, 700, 700, 1000, 1000, 1200, 1500, 2000];
+
+const resolveTradeResult = async (
+  transactionId: number,
+  trade: TradeEntry,
+  odd: number,
+  fallbackClosePrice: number
+): Promise<{ outcome: "win" | "loss" | "draw"; resultAmount: number; closePrice: number } | null> => {
+  let closePrice = fallbackClosePrice;
+
+  for (const delay of RESULT_POLL_DELAYS_MS) {
+    await sleep(delay);
+
+    try {
+      const txData = await alphaApi.getTransaction(transactionId);
+      if (txData.status !== "success" || txData.transaction.status === "Pendente") {
+        continue;
+      }
+
+      const tx = txData.transaction;
+      console.log("[Bot] Broker result:", tx.status, "profit_cents:", tx.profit_cents, "returns_cents:", tx.returns_cents, "amount_cents:", tx.amount_cents);
+
+      if (tx.symbol_price && tx.symbol_price !== "0") {
+        closePrice = Number(tx.symbol_price);
+      }
+
+      if (tx.status === "Ganhou") {
+        return {
+          outcome: "win",
+          resultAmount: typeof tx.profit_cents === "number"
+            ? tx.profit_cents / 100
+            : Number(((odd > 10 ? trade.amount * odd / 100 : trade.amount * (odd - 1))).toFixed(2)),
+          closePrice,
+        };
+      }
+
+      if (tx.status === "Empatou") {
+        return {
+          outcome: "draw",
+          resultAmount: 0,
+          closePrice,
+        };
+      }
+
+      if (tx.status === "Perdeu") {
+        return {
+          outcome: "loss",
+          resultAmount: -trade.amount,
+          closePrice,
+        };
+      }
+    } catch (e) {
+      console.warn("[Bot] Failed to fetch transaction result, retrying", e);
+    }
+  }
+
+  return null;
+};
+
 function loadState(): PersistedBotState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -362,41 +421,21 @@ export const useTradingBot = () => {
 
         await waitForExpiration(result.expiration_timestamp);
 
-       // Poll the broker for the real result — fast polling
-       let outcome: "win" | "loss" | "draw" = "loss";
-       let resultAmount = -trade.amount;
-       let realClosePrice = botRef.current.currentPrice || trade.currentPrice || trade.entryPrice;
+        const resolvedTrade = await resolveTradeResult(
+          result.transaction_id,
+          trade,
+          result.odd,
+          botRef.current.currentPrice || trade.currentPrice || trade.entryPrice
+        );
 
-       for (let attempt = 0; attempt < 4; attempt++) {
-         await sleep(attempt === 0 ? 500 : 1000);
-         try {
-           const txData = await alphaApi.getTransaction(result.transaction_id);
-           if (txData.status === "success" && txData.transaction.status !== "Pendente") {
-             const tx = txData.transaction;
-             console.log("[Bot] Broker result:", tx.status, "profit_cents:", tx.profit_cents, "returns_cents:", tx.returns_cents, "amount_cents:", tx.amount_cents);
+        if (!resolvedTrade) {
+          setIsProcessing(false);
+          setStatus("Aguardando resultado...");
+          persistNow();
+          return;
+        }
 
-             if (tx.symbol_price && tx.symbol_price !== "0") {
-               realClosePrice = Number(tx.symbol_price);
-             }
-
-             if (tx.status === "Ganhou") {
-               outcome = "win";
-               resultAmount = typeof tx.profit_cents === "number"
-                 ? tx.profit_cents / 100
-                 : Number(((result.odd > 10 ? trade.amount * result.odd / 100 : trade.amount * (result.odd - 1))).toFixed(2));
-             } else if (tx.status === "Empatou") {
-               outcome = "draw";
-               resultAmount = 0;
-             } else {
-               outcome = "loss";
-               resultAmount = -trade.amount;
-             }
-             break;
-           }
-         } catch (e) {
-           console.warn("[Bot] Failed to fetch transaction result, attempt", attempt + 1, e);
-         }
-       }
+        const { outcome, resultAmount, closePrice: realClosePrice } = resolvedTrade;
 
        const tradeStatus = outcome === "draw" ? "draw" as const : outcome === "win" ? "win" as const : "loss" as const;
 

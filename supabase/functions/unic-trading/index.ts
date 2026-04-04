@@ -445,19 +445,25 @@ async function handleTransaction(session: SessionData, transactionId: number) {
       const sRes = await fetch(url, { headers: makeHeaders(session) });
       const sData = await sRes.json();
       console.log("Settlement check for tx", transactionId, ":", JSON.stringify(sData).substring(0, 400));
-      
-      // Settlement result_type: 1=win, 2=loss, 0=draw/pending
-      if (sData.updated === 1 || sData.amount_result_cents !== undefined) {
-        const resultCents = sData.amount_result_cents ?? 0;
-        // result_type from broker: check if it maps to win/loss/draw
-        if (resultCents > 0) {
-          return makeSettlementResult(transactionId, "Ganhou", resultCents, sData);
-        } else if (resultCents === 0 && sData.updated === 1) {
-          return makeSettlementResult(transactionId, "Empatou", 0, sData);
-        } else if (resultCents < 0 || (sData.result_type && sData.updated === 1)) {
-          return makeSettlementResult(transactionId, "Perdeu", resultCents, sData);
-        }
+
+      const hasConfirmedUpdate = sData.updated === 1;
+      const resultCents = typeof sData.amount_result_cents === "number"
+        ? sData.amount_result_cents
+        : null;
+
+      if (!hasConfirmedUpdate || resultCents === null || Number.isNaN(resultCents)) {
+        continue;
       }
+
+      if (resultCents > 0) {
+        return makeSettlementResult(transactionId, "Ganhou", resultCents, sData);
+      }
+
+      if (resultCents < 0) {
+        return makeSettlementResult(transactionId, "Perdeu", resultCents, sData);
+      }
+
+      return makeSettlementResult(transactionId, "Empatou", 0, sData);
     }
   } catch (e) {
     console.error("Settlement check error:", e);

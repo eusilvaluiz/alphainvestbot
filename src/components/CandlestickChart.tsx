@@ -199,7 +199,15 @@ const SymbolPickerModal = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    // Small delay to avoid iOS keyboard zoom issues
+    const timer = setTimeout(() => inputRef.current?.focus(), 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Lock body scroll on mobile when open
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
   }, []);
 
   const filtered = useMemo(() => {
@@ -219,66 +227,80 @@ const SymbolPickerModal = ({
   }, [symbols, search, activeCategory]);
 
   return (
-    <div className="absolute top-full left-0 mt-2 bg-card border border-border rounded-xl shadow-2xl z-50 w-[calc(100vw-2rem)] sm:w-96 overflow-hidden">
-      {/* Category Tabs */}
-      <div className="flex items-center gap-1 px-2 pt-2 pb-1 overflow-x-auto scrollbar-none">
-        {CATEGORY_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveCategory(tab.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-              activeCategory === tab.key
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-50 bg-black/60 sm:bg-transparent" onClick={onClose} />
 
-      {/* Search */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-        <Search size={16} className="text-muted-foreground shrink-0" />
-        <input
-          ref={inputRef}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar ativo..."
-          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-        />
-        {search && (
-          <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground">
-            <X size={14} />
+      {/* Panel: fullscreen on mobile, dropdown on desktop */}
+      <div className="fixed inset-0 z-50 flex flex-col bg-card sm:absolute sm:inset-auto sm:top-full sm:left-0 sm:mt-2 sm:w-96 sm:rounded-xl sm:border sm:border-border sm:shadow-2xl sm:max-h-[420px] overflow-hidden">
+        {/* Mobile header */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-2 sm:hidden">
+          <h3 className="font-heading font-semibold text-base text-foreground">Selecionar Ativo</h3>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary transition-colors">
+            <X size={20} className="text-muted-foreground" />
           </button>
-        )}
-      </div>
+        </div>
 
-      {/* List */}
-      <div className="max-h-72 overflow-y-auto scrollbar-none">
-        {filtered.length === 0 ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            Nenhum ativo encontrado
-          </div>
-        ) : (
-          filtered.map((s) => (
+        {/* Category Tabs */}
+        <div className="flex items-center gap-1 px-3 sm:px-2 pt-2 sm:pt-2 pb-1 overflow-x-auto scrollbar-none">
+          {CATEGORY_TABS.map((tab) => (
             <button
-              key={s.id}
-              onClick={() => onSelect(s)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-colors ${
-                selectedSymbol?.id === s.id
-                  ? "bg-primary/10 text-primary"
-                  : "text-foreground hover:bg-secondary"
+              key={tab.key}
+              onClick={() => setActiveCategory(tab.key)}
+              className={`px-3 py-1.5 rounded-lg text-sm sm:text-xs font-medium whitespace-nowrap transition-colors ${
+                activeCategory === tab.key
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
               }`}
             >
-              <img src={s.img} alt={s.name} className="w-6 h-6 rounded-full" />
-              <span className="font-medium">{s.name}</span>
-              <span className="ml-auto text-xs text-muted-foreground">{s.code}</span>
+              {tab.label}
             </button>
-          ))
-        )}
+          ))}
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center gap-2 px-4 sm:px-3 py-2.5 sm:py-2 border-b border-border">
+          <Search size={18} className="text-muted-foreground shrink-0 sm:w-4 sm:h-4" />
+          <input
+            ref={inputRef}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar ativo..."
+            className="flex-1 bg-transparent text-base sm:text-sm text-foreground placeholder:text-muted-foreground outline-none"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground p-1">
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto scrollbar-none sm:max-h-72">
+          {filtered.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              Nenhum ativo encontrado
+            </div>
+          ) : (
+            filtered.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => onSelect(s)}
+                className={`w-full flex items-center gap-3 px-4 sm:px-3 py-3 sm:py-2.5 text-sm transition-colors ${
+                  selectedSymbol?.id === s.id
+                    ? "bg-primary/10 text-primary"
+                    : "text-foreground hover:bg-secondary active:bg-secondary"
+                }`}
+              >
+                <img src={s.img} alt={s.name} className="w-7 h-7 sm:w-6 sm:h-6 rounded-full" />
+                <span className="font-medium">{s.name}</span>
+                <span className="ml-auto text-xs text-muted-foreground">{s.code}</span>
+              </button>
+            ))
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

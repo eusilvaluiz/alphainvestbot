@@ -49,10 +49,12 @@ function loadState(): PersistedBotState | null {
     const state = JSON.parse(raw) as PersistedBotState;
     
     // Clean up stale "open" or "processing" trades that already expired
+    // Only mark as loss visually — do NOT touch profitLoss since these were
+    // orphaned by crashes, not real settled losses
     const now = Math.floor(Date.now() / 1000);
     state.trades = state.trades.map((t) => {
       if ((t.status === "open" || t.status === "processing") && t.expirationTimestamp && now >= t.expirationTimestamp + 30) {
-        return { ...t, status: "loss" as const, result: -t.amount };
+        return { ...t, status: "loss" as const, result: t.result ?? 0 };
       }
       return t;
     });

@@ -1,4 +1,9 @@
-const API_BASE = "/alpha-api";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const IS_DEV = import.meta.env.DEV;
+
+// In dev, use Vite proxy; in production, use edge function
+const API_BASE = IS_DEV ? "/alpha-api" : `${SUPABASE_URL}/functions/v1/alpha-proxy`;
 
 export interface Symbol {
   id: number;
@@ -149,13 +154,26 @@ class AlphaApi {
     return this.session;
   }
 
+  private getBaseHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (!IS_DEV && SUPABASE_KEY) {
+      headers["apikey"] = SUPABASE_KEY;
+    }
+    return headers;
+  }
+
   private getAuthHeaders(): Record<string, string> {
     const session = this.getSession();
     if (!session) throw new Error("Not authenticated");
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session.accessToken}`,
-    };
+    const headers = this.getBaseHeaders();
+    if (IS_DEV) {
+      headers["Authorization"] = `Bearer ${session.accessToken}`;
+    } else {
+      headers["x-alpha-token"] = session.accessToken;
+    }
+    return headers;
   }
 
   isLoggedIn(): boolean {
@@ -165,7 +183,7 @@ class AlphaApi {
   async login(user: string, pass: string): Promise<UserSession> {
     const res = await fetch(`${API_BASE}/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.getBaseHeaders(),
       body: JSON.stringify({ user, pass }),
     });
 
@@ -200,13 +218,13 @@ class AlphaApi {
   }
 
   async getSymbols(): Promise<Symbol[]> {
-    const res = await fetch(`${API_BASE}/symbols`);
+    const res = await fetch(`${API_BASE}/symbols`, { headers: this.getBaseHeaders() });
     const data = await res.json();
     return data.symbols || [];
   }
 
   async getHistoricalData(symbol: string): Promise<CandleData[]> {
-    const res = await fetch(`${API_BASE}/historical-data?symbol=${symbol}`);
+    const res = await fetch(`${API_BASE}/historical-data?symbol=${symbol}`, { headers: this.getBaseHeaders() });
     const data = await res.json();
     return data.data || [];
   }

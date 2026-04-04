@@ -158,7 +158,7 @@ async function handleSymbols(session: SessionData) {
     : Object.values(data.symbols);
 
   // Transform to match the expected format
-  const symbols = data.symbols.map((s: any) => ({
+  const symbols = symbolsList.map((s: any) => ({
     id: s.id,
     code: s.code,
     type: s.type,

@@ -224,7 +224,7 @@ class AlphaApi {
   }
 
   async getHistoricalData(symbol: string): Promise<CandleData[]> {
-    const res = await fetch(`${API_BASE}/historical-data?symbol=${symbol}`);
+    const res = await fetch(`${API_BASE}/historical-data?symbol=${symbol}`, { headers: this.getBaseHeaders() });
     const data = await res.json();
     return data.data || [];
   }

@@ -95,23 +95,19 @@ async function doLogin(brokerUser: string, brokerPass: string): Promise<SessionD
     if (accountMatch) {
       accountId = parseInt(accountMatch[1]);
     }
-    // Also try the accounts data
     if (!accountId) {
       const accMatch = trHtml.match(/"id"\s*:\s*(\d+)\s*,\s*"amount"/);
       if (accMatch) accountId = parseInt(accMatch[1]);
     }
-     // Try more patterns for account ID
-     if (!accountId) {
-       const accMatch2 = trHtml.match(/account_id['":\s]+(\d+)/);
-       if (accMatch2) accountId = parseInt(accMatch2[1]);
-     }
-     if (!accountId) {
-       const accMatch3 = trHtml.match(/"accounts"\s*:\s*\[\s*\{[^}]*"id"\s*:\s*(\d+)/);
-       if (accMatch3) accountId = parseInt(accMatch3[1]);
-     }
-     // Default to 0 if not found (valid for some accounts)
-     if (accountId === null) accountId = 0;
-     console.log("doLogin accountId:", accountId);
+    if (!accountId) {
+      const accMatch2 = trHtml.match(/account_id['":\s]+(\d+)/);
+      if (accMatch2) accountId = parseInt(accMatch2[1]);
+    }
+    if (!accountId) {
+      const accMatch3 = trHtml.match(/"accounts"\s*:\s*\[\s*\{[^}]*"id"\s*:\s*(\d+)/);
+      if (accMatch3) accountId = parseInt(accMatch3[1]);
+    }
+    console.log("doLogin accountId from HTML:", accountId);
 
     // Merge traderoom cookies
     const trSetCookies = (trRes.headers as any).getSetCookie?.() as string[] | undefined;

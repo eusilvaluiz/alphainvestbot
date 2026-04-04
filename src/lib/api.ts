@@ -1,9 +1,4 @@
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-const IS_DEV = import.meta.env.DEV;
-
-// In dev, use Vite proxy; in production, use edge function
-const API_BASE = IS_DEV ? "/alpha-api" : `${SUPABASE_URL}/functions/v1/alpha-proxy`;
+import { supabase } from "@/integrations/supabase/client";
 
 export interface Symbol {
   id: number;
@@ -58,8 +53,8 @@ export interface UserSession {
 
 export interface OpenPositionRequest {
   symbol: string;
-  direction: number; // 0 = down/sell, 1 = up/buy
-  amount: string; // formatted like "766,00"
+  direction: number;
+  amount: string;
   price: number;
 }
 
@@ -77,8 +72,8 @@ export interface OpenPositionResponse {
   symbol: string;
   symbol_price: number;
   symbol_img: string;
-  direction: string; // "up" or "down"
-  transaction_type: string; // "buy" or "sell"
+  direction: string;
+  transaction_type: string;
   expiration_date: string;
   expiration_datetime: string;
   expiration_timestamp: number;
@@ -97,7 +92,7 @@ export interface SettlementResponse {
   amount_result: string;
   currency_code: string;
   amount_result_cents: number;
-  result_type: number; // 2 = win, 1 = loss
+  result_type: number;
   user_credit: string;
   transaction_account: number;
 }
@@ -108,8 +103,8 @@ export interface TransactionResponse {
   transaction: {
     id: number;
     date: string;
-    status: string; // "Ganhou" or "Perdeu"
-    status_id: number; // 2 = win, 1 = loss
+    status: string;
+    status_id: number;
     direction: number;
     symbol: string;
     symbol_price: string;
@@ -141,8 +136,62 @@ export interface BalanceResponse {
   bonus_cents: number;
 }
 
+interface UnicSession {
+  cookies: string;
+  xsrf: string;
+  accountId: number | null;
+}
+
 class AlphaApi {
   private session: UserSession | null = null;
+  private unicSession: UnicSession | null = null;
+
+  private getBrokerCredentials(): { user: string; pass: string } | null {
+    const stored = localStorage.getItem("broker_credentials");
+    if (!stored) return null;
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return null;
+    }
+  }
+
+  private async callUnicTrading(action: string, extra: Record<string, any> = {}): Promise<any> {
+    const creds = this.getBrokerCredentials();
+
+    const body: Record<string, any> = {
+      action,
+      ...extra,
+    };
+
+    // Include session for reuse
+    if (this.unicSession) {
+      body.session_cookies = this.unicSession.cookies;
+      body.session_xsrf = this.unicSession.xsrf;
+      body.session_account_id = this.unicSession.accountId;
+    }
+
+    // Include credentials for re-login if session expired
+    if (creds) {
+      body.broker_user = creds.user;
+      body.broker_pass = creds.pass;
+    }
+
+    const { data, error } = await supabase.functions.invoke("unic-trading", {
+      body,
+    });
+
+    if (error) throw new Error(error.message || "Erro na chamada da API");
+    if (data?.error) throw new Error(data.error);
+
+    // Cache session for reuse
+    if (data?._session) {
+      this.unicSession = data._session;
+      delete data._session;
+    }
+
+    return data;
+  }
 
   getSession(): UserSession | null {
     if (!this.session) {
@@ -154,48 +203,26 @@ class AlphaApi {
     return this.session;
   }
 
-  private getBaseHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (!IS_DEV && SUPABASE_KEY) {
-      headers["apikey"] = SUPABASE_KEY;
-    }
-    return headers;
-  }
-
-  private getAuthHeaders(): Record<string, string> {
-    const session = this.getSession();
-    if (!session) throw new Error("Not authenticated");
-    const headers = this.getBaseHeaders();
-    if (IS_DEV) {
-      headers["Authorization"] = `Bearer ${session.accessToken}`;
-    } else {
-      headers["x-alpha-token"] = session.accessToken;
-    }
-    return headers;
-  }
-
   isLoggedIn(): boolean {
     return this.getSession() !== null;
   }
 
   async login(user: string, pass: string): Promise<UserSession> {
-    const res = await fetch(`${API_BASE}/login`, {
-      method: "POST",
-      headers: this.getBaseHeaders(),
-      body: JSON.stringify({ user, pass }),
+    // Store credentials for future API calls
+    localStorage.setItem("broker_credentials", JSON.stringify({ user, pass }));
+
+    const data = await this.callUnicTrading("login", {
+      broker_user: user,
+      broker_pass: pass,
     });
 
-    const data: LoginResponse = await res.json();
-
-    if (data.status !== "success" || !data.access_token) {
+    if (data.status !== "success") {
       throw new Error("Credenciais inválidas");
     }
 
     this.session = {
-      accessToken: data.access_token,
-      wsToken: data.ws_token,
+      accessToken: "unic_session",
+      wsToken: "",
       userId: data.id,
       login: data.login,
       name: data.name,
@@ -214,28 +241,27 @@ class AlphaApi {
 
   logout(): void {
     this.session = null;
+    this.unicSession = null;
     localStorage.removeItem("alpha_session");
   }
 
   async getSymbols(): Promise<Symbol[]> {
-    const res = await fetch(`${API_BASE}/symbols`, { headers: this.getBaseHeaders() });
-    const data = await res.json();
+    const data = await this.callUnicTrading("symbols");
     return data.symbols || [];
   }
 
   async getHistoricalData(symbol: string): Promise<CandleData[]> {
-    const res = await fetch(`${API_BASE}/historical-data?symbol=${symbol}`, { headers: this.getBaseHeaders() });
-    const data = await res.json();
+    const data = await this.callUnicTrading("historical-data", { symbol });
     return data.data || [];
   }
 
   async openPosition(req: OpenPositionRequest): Promise<OpenPositionResponse> {
-    const res = await fetch(`${API_BASE}/open-position`, {
-      method: "POST",
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify(req),
+    const data = await this.callUnicTrading("open-position", {
+      symbol: req.symbol,
+      direction: req.direction,
+      amount: req.amount,
+      price: req.price,
     });
-    const data = await res.json();
     if (data.status !== "success") {
       throw new Error(data.message || "Erro ao abrir posição");
     }
@@ -243,24 +269,15 @@ class AlphaApi {
   }
 
   async getSettlement(): Promise<SettlementResponse> {
-    const res = await fetch(`${API_BASE}/settlement`, {
-      headers: this.getAuthHeaders(),
-    });
-    return await res.json();
+    return await this.callUnicTrading("settlement");
   }
 
   async getTransaction(id: number): Promise<TransactionResponse> {
-    const res = await fetch(`${API_BASE}/transaction/${id}`, {
-      headers: this.getAuthHeaders(),
-    });
-    return await res.json();
+    return await this.callUnicTrading("transaction", { transaction_id: id });
   }
 
   async getBalance(): Promise<BalanceResponse> {
-    const res = await fetch(`${API_BASE}/balance`, {
-      headers: this.getAuthHeaders(),
-    });
-    return await res.json();
+    return await this.callUnicTrading("balance");
   }
 
   updateSessionCredit(credit: string, creditCents: number) {

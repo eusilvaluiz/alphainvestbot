@@ -12,12 +12,6 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
     proxy: {
-      "/alpha-api": {
-        target: "https://www.alphainvestbot.com",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/alpha-api/, "/api"),
-        secure: true,
-      },
       "/unic-api": {
         target: "https://unicbroker.com",
         changeOrigin: true,

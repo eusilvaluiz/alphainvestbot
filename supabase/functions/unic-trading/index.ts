@@ -417,35 +417,47 @@ async function handleTransaction(session: SessionData, transactionId: number) {
   let transaction: any = null;
 
   try {
-    // Get first page to learn pagination
-    const firstRes = await fetch(`${UNIC_BASE}/binary/history/1`, {
+    // Try fetching history with and without account_id
+    const accountId = session.accountId;
+    const historyUrl = accountId
+      ? `${UNIC_BASE}/binary/history/1?account_id=${accountId}`
+      : `${UNIC_BASE}/binary/history/1`;
+
+    const firstRes = await fetch(historyUrl, {
       headers: makeHeaders(session),
     });
     const firstData = await firstRes.json();
+    
+    console.log("History response keys:", Object.keys(firstData), "status:", firstData.status);
+    
     const limit = firstData.limit ?? 10;
     const total = firstData.total ?? 0;
     const totalPages = firstData.last_page ?? (Math.ceil(total / limit) || 1);
 
-    console.log("History: pages=", totalPages, "total=", total, "target:", transactionId);
+    console.log("History: pages=", totalPages, "total=", total, "target:", transactionId, "accountId:", accountId);
 
-    // Search from last page backwards (most recent first)
-    for (let page = totalPages; page >= Math.max(1, totalPages - 5) && !transaction; page--) {
-      const data = page === 1 ? firstData : await (await fetch(`${UNIC_BASE}/binary/history/${page}`, { headers: makeHeaders(session) })).json();
-      const txList = data.data || data.transactions?.data || data.transactions || [];
-
-      if (Array.isArray(txList)) {
-        for (const tx of txList) {
-          if (tx.id === transactionId || tx.transaction_id === transactionId) {
-            transaction = tx;
-            console.log("Found tx:", JSON.stringify(tx).substring(0, 500));
-            break;
-          }
-        }
+    // If no results with account_id, try without
+    if (total === 0 && accountId) {
+      const retryRes = await fetch(`${UNIC_BASE}/binary/history/1`, {
+        headers: makeHeaders(session),
+      });
+      const retryData = await retryRes.json();
+      console.log("History retry without account_id: total=", retryData.total);
+      
+      if ((retryData.total ?? 0) > 0) {
+        return searchInHistory(session, retryData, transactionId);
       }
+    }
+
+    if (total > 0) {
+      return searchInHistory(session, firstData, transactionId);
     }
   } catch (e) {
     console.error("History error:", e);
   }
+
+  return makePendingResult(transactionId);
+}
 
   if (!transaction) {
     return {

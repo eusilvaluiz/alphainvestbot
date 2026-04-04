@@ -210,11 +210,9 @@ export const useTradingBot = () => {
       : Math.floor(referenceTimestamp / 60) * 60 + 60;
   }, []);
 
-  const getRandomFirstEntryTimestamp = useCallback((): number => {
+  const getFirstEntryTimestamp = useCallback((): number => {
     const now = Math.floor(Date.now() / 1000);
-    const nextCandleOpen = getNextCandleOpenTimestamp(now);
-    const extraCandlesToSkip = Math.floor(Math.random() * 3);
-    return nextCandleOpen + extraCandlesToSkip * 60;
+    return getNextCandleOpenTimestamp(now);
   }, [getNextCandleOpenTimestamp]);
 
   const executeTradeCycle = useCallback(

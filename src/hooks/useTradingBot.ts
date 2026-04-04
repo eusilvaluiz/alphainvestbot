@@ -116,20 +116,15 @@ export const useTradingBot = () => {
       running: botRef.current.running,
       config: botRef.current.config,
       symbolCode: botRef.current.symbol?.code ?? null,
-      trades: [], // will be filled below
+      trades: botRef.current.trades,
       profitLoss: botRef.current.profitLoss,
-      wins: 0,
-      losses: 0,
-      operations: 0,
+      wins: botRef.current.wins,
+      losses: botRef.current.losses,
+      operations: botRef.current.operations,
       martingaleLevel: martingaleLevel.current,
       lastDirection: lastDirection.current,
       directionCounter: directionCounter.current,
     };
-    // We read the latest from setters
-    setTrades((t) => { state.trades = t; return t; });
-    setWins((w) => { state.wins = w; return w; });
-    setLosses((l) => { state.losses = l; return l; });
-    setOperations((o) => { state.operations = o; return o; });
     saveState(state);
   }, []);
 

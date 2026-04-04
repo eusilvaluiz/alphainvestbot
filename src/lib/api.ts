@@ -218,7 +218,7 @@ class AlphaApi {
   }
 
   async getSymbols(): Promise<Symbol[]> {
-    const res = await fetch(`${API_BASE}/symbols`);
+    const res = await fetch(`${API_BASE}/symbols`, { headers: this.getBaseHeaders() });
     const data = await res.json();
     return data.symbols || [];
   }

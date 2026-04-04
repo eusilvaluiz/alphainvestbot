@@ -100,6 +100,18 @@ async function doLogin(brokerUser: string, brokerPass: string): Promise<SessionD
       const accMatch = trHtml.match(/"id"\s*:\s*(\d+)\s*,\s*"amount"/);
       if (accMatch) accountId = parseInt(accMatch[1]);
     }
+     // Try more patterns for account ID
+     if (!accountId) {
+       const accMatch2 = trHtml.match(/account_id['":\s]+(\d+)/);
+       if (accMatch2) accountId = parseInt(accMatch2[1]);
+     }
+     if (!accountId) {
+       const accMatch3 = trHtml.match(/"accounts"\s*:\s*\[\s*\{[^}]*"id"\s*:\s*(\d+)/);
+       if (accMatch3) accountId = parseInt(accMatch3[1]);
+     }
+     // Default to 0 if not found (valid for some accounts)
+     if (accountId === null) accountId = 0;
+     console.log("doLogin accountId:", accountId);
 
     // Merge traderoom cookies
     const trSetCookies = (trRes.headers as any).getSetCookie?.() as string[] | undefined;
@@ -384,25 +396,40 @@ async function handleSettlement(session: SessionData) {
 
 /** GET /transaction/{id} — Get transaction details */
 async function handleTransaction(session: SessionData, transactionId: number) {
-  // Use history endpoint or refresh to get transaction status
-  const res = await fetch(`${UNIC_BASE}/binary/history/1`, {
-    headers: makeHeaders(session),
-  });
+  let transaction: any = null;
 
-  const data = await res.json();
+  try {
+    // Get first page to learn pagination
+    const firstRes = await fetch(`${UNIC_BASE}/binary/history/1`, {
+      headers: makeHeaders(session),
+    });
+    const firstData = await firstRes.json();
+    const limit = firstData.limit ?? 10;
+    const total = firstData.total ?? 0;
+    const totalPages = firstData.last_page ?? (Math.ceil(total / limit) || 1);
 
-  // Find the specific transaction
-  let transaction = null;
-  const txList = data.transactions?.data || data.data || [];
-  for (const tx of txList) {
-    if (tx.id === transactionId) {
-      transaction = tx;
-      break;
+    console.log("History: pages=", totalPages, "total=", total, "target:", transactionId);
+
+    // Search from last page backwards (most recent first)
+    for (let page = totalPages; page >= Math.max(1, totalPages - 5) && !transaction; page--) {
+      const data = page === 1 ? firstData : await (await fetch(`${UNIC_BASE}/binary/history/${page}`, { headers: makeHeaders(session) })).json();
+      const txList = data.data || data.transactions?.data || data.transactions || [];
+
+      if (Array.isArray(txList)) {
+        for (const tx of txList) {
+          if (tx.id === transactionId || tx.transaction_id === transactionId) {
+            transaction = tx;
+            console.log("Found tx:", JSON.stringify(tx).substring(0, 500));
+            break;
+          }
+        }
+      }
     }
+  } catch (e) {
+    console.error("History error:", e);
   }
 
   if (!transaction) {
-    // Return a pending status if not found yet
     return {
       date: new Date().toISOString(),
       status: "pending",
@@ -419,6 +446,7 @@ async function handleTransaction(session: SessionData, transactionId: number) {
         amount_percent: 0,
         returns: "0",
         returns_cents: 0,
+        profit_cents: 0,
         expiration: 0,
         expiration_date: "",
         notes: "",
@@ -427,8 +455,38 @@ async function handleTransaction(session: SessionData, transactionId: number) {
     };
   }
 
-  // Map UnicBroker status to expected format
-  const statusId = transaction.status_id ?? (transaction.status === "Ganhou" ? 2 : transaction.status === "Perdeu" ? 1 : 0);
+  // Parse amounts — broker uses "return" field as "37,00" format
+  const returnStr = transaction.return ?? transaction.returns ?? "0";
+  const returnFloat = parseFloat(String(returnStr).replace(/\./g, "").replace(",", "."));
+  const amountStr = transaction.amount ?? "0";
+  const amountFloat = parseFloat(String(amountStr).replace(/\./g, "").replace(",", "."));
+  const returnCents = Math.round(returnFloat * 100);
+  const amountCents = transaction.amount_cents ?? Math.round(amountFloat * 100);
+
+  // Determine outcome by comparing return vs amount (most reliable)
+  let outcome: "Ganhou" | "Perdeu" | "Empatou" | "Pendente";
+  let statusId: number;
+
+  if (returnCents > amountCents) {
+    outcome = "Ganhou";
+    statusId = 2;
+  } else if (returnCents === amountCents && amountCents > 0) {
+    outcome = "Empatou";
+    statusId = 3;
+  } else if (amountCents > 0 && returnCents < amountCents) {
+    outcome = "Perdeu";
+    statusId = 1;
+  } else {
+    outcome = "Pendente";
+    statusId = 0;
+  }
+
+  const profitCents = outcome === "Ganhou" ? returnCents - amountCents
+    : outcome === "Empatou" ? 0
+    : outcome === "Perdeu" ? -amountCents
+    : 0;
+
+  console.log("Tx result:", transactionId, outcome, "amount:", amountCents, "return:", returnCents, "profit:", profitCents);
 
   return {
     date: transaction.date ?? new Date().toISOString(),
@@ -436,24 +494,25 @@ async function handleTransaction(session: SessionData, transactionId: number) {
     transaction: {
       id: transaction.id,
       date: transaction.date ?? "",
-      status: statusId === 2 ? "Ganhou" : statusId === 1 ? "Perdeu" : "Pendente",
+      status: outcome,
       status_id: statusId,
       direction: transaction.direction ?? 0,
       symbol: transaction.symbol ?? "",
       symbol_price: String(transaction.symbol_price ?? transaction.price ?? "0"),
-      amount: transaction.amount ?? "0",
-      amount_cents: transaction.amount_cents ?? 0,
+      amount: amountStr,
+      amount_cents: amountCents,
       amount_percent: transaction.amount_percent ?? 0,
-      returns: transaction.returns ?? "0",
-      returns_cents: transaction.returns_cents ?? 0,
+      returns: returnStr,
+      returns_cents: returnCents,
+      profit_cents: profitCents,
       expiration: transaction.expiration ?? 0,
       expiration_date: transaction.expiration_date ?? "",
       notes: transaction.notes ?? "",
       user: {
-        id: transaction.user?.id ?? 0,
-        login: transaction.user?.login ?? "",
-        balance: transaction.user?.balance ?? "0",
-        balance_cents: transaction.user?.balance_cents ?? 0,
+        id: transaction.user?.id ?? transaction.user ?? 0,
+        login: "",
+        balance: "0",
+        balance_cents: 0,
       },
     },
   };

@@ -141,6 +141,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const authenticateWithBroker = async (username: string, password: string) => {
     const normalizedUsername = normalizeUsername(username);
+    authenticateRef.current = authenticateWithBroker;
 
     if (normalizedUsername.length < 3) {
       throw new Error("Informe um usuário válido");

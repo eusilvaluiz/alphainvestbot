@@ -46,7 +46,18 @@ function loadState(): PersistedBotState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as PersistedBotState;
+    const state = JSON.parse(raw) as PersistedBotState;
+    
+    // Clean up stale "open" or "processing" trades that already expired
+    const now = Math.floor(Date.now() / 1000);
+    state.trades = state.trades.map((t) => {
+      if ((t.status === "open" || t.status === "processing") && t.expirationTimestamp && now >= t.expirationTimestamp + 30) {
+        return { ...t, status: "loss" as const, result: -t.amount };
+      }
+      return t;
+    });
+    
+    return state;
   } catch {
     return null;
   }

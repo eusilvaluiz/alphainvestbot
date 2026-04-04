@@ -21,54 +21,69 @@ const ControlPanel = ({
   martingaleLevel = 0,
   isMartingale = false,
 }: ControlPanelProps) => {
-  return (
-    <div className="bg-card rounded-lg border border-border p-4">
-      <h2 className="text-xs font-heading font-semibold text-muted-foreground tracking-wider uppercase mb-4">
-        Painel de Controle
-      </h2>
+  const isActive = status !== "Parado";
+  const total = wins + losses;
+  const winPercent = total > 0 ? (wins / total) * 100 : 50;
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-secondary rounded-lg p-3">
-          <span className="text-xs text-muted-foreground">Saldo</span>
-          <p className="text-lg font-semibold text-foreground mt-1">
-            R$ {balance.toFixed(2)}
-          </p>
-        </div>
-        <div className="bg-secondary rounded-lg p-3">
-          <span className="text-xs text-muted-foreground">Status</span>
-          <div className="mt-1">
-            <p className="text-lg font-semibold text-foreground flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${status !== "Parado" ? "bg-chart-green animate-pulse" : "bg-muted-foreground"}`} />
-              {status}
+  return (
+    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      {/* Top row: Balance + P&L */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Saldo</span>
+            <p className="text-base font-heading font-bold text-foreground leading-tight">
+              R$ {balance.toFixed(2)}
             </p>
-            {isMartingale && martingaleLevel > 0 && (
-              <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 mt-1 inline-block">
-                M L{martingaleLevel}
-              </span>
-            )}
+          </div>
+          <div className="w-px h-8 bg-border" />
+          <div>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">P&L</span>
+            <p className={`text-base font-heading font-bold leading-tight ${profitLoss >= 0 ? "text-chart-green" : "text-chart-red"}`}>
+              {profitLoss >= 0 ? "+" : ""}R$ {profitLoss.toFixed(2)}
+            </p>
           </div>
         </div>
-        <div className="bg-secondary rounded-lg p-3">
-          <span className="text-xs text-muted-foreground">Lucro / Perda</span>
-          <p className={`text-lg font-semibold mt-1 ${profitLoss >= 0 ? "text-chart-green" : "text-chart-red"}`}>
-            {profitLoss >= 0 ? "+" : ""}R$ {profitLoss.toFixed(2)}
-          </p>
+
+        <div className="flex items-center gap-2">
+          {isMartingale && martingaleLevel > 0 && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 animate-pulse">
+              MG L{martingaleLevel}
+            </span>
+          )}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary">
+            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-chart-green animate-pulse" : "bg-muted-foreground"}`} />
+            <span className="text-[10px] font-medium text-foreground uppercase tracking-wider">
+              {status}
+            </span>
+          </div>
         </div>
-        <div className="bg-secondary rounded-lg p-3">
-          <span className="text-xs text-muted-foreground">Taxa de Acerto</span>
-          <p className="text-lg font-semibold text-foreground mt-1">{winRate.toFixed(1)}%</p>
+      </div>
+
+      {/* Bottom row: Stats */}
+      <div className="flex items-center gap-4">
+        {/* Win Rate */}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">Win Rate</span>
+          <span className="text-xs font-bold text-foreground">{winRate.toFixed(0)}%</span>
         </div>
-        <div className="bg-secondary rounded-lg p-3">
-          <span className="text-xs text-muted-foreground">Operações</span>
-          <p className="text-lg font-semibold text-foreground mt-1">{operations}</p>
+
+        {/* Win/Loss bar */}
+        <div className="flex-1 flex items-center gap-2 min-w-0">
+          <span className="text-[10px] text-chart-green font-medium">{wins}W</span>
+          <div className="flex-1 h-1.5 rounded-full bg-chart-red/30 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-chart-green transition-all duration-500"
+              style={{ width: `${winPercent}%` }}
+            />
+          </div>
+          <span className="text-[10px] text-chart-red font-medium">{losses}L</span>
         </div>
-        <div className="bg-secondary rounded-lg p-3">
-          <span className="text-xs text-muted-foreground">Acertos / Erros</span>
-          <p className="text-lg font-semibold mt-1">
-            <span className="text-chart-green">{wins}</span>
-            <span className="text-muted-foreground"> / </span>
-            <span className="text-chart-red">{losses}</span>
-          </p>
+
+        {/* Ops count */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-muted-foreground">Ops</span>
+          <span className="text-xs font-bold text-foreground">{operations}</span>
         </div>
       </div>
     </div>

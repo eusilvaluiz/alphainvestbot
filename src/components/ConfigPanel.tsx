@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { Play, Square, Save, Brain, Zap, Sparkles } from "lucide-react";
 
 type AiModel = "grok" | "claude" | "gpt";
 
@@ -25,6 +27,12 @@ interface ConfigPanelProps {
   onModelChange?: (model: AiModel) => void;
 }
 
+const models: { id: AiModel; label: string; icon: typeof Brain }[] = [
+  { id: "grok", label: "Grok", icon: Zap },
+  { id: "claude", label: "Claude", icon: Brain },
+  { id: "gpt", label: "GPT", icon: Sparkles },
+];
+
 const ConfigPanel = ({
   isLoggedIn,
   balance,
@@ -35,13 +43,14 @@ const ConfigPanel = ({
   onModelChange,
 }: ConfigPanelProps) => {
   const { user } = useAuth();
-  const [entryValue, setEntryValue] = useState("10");
-  const [position, setPosition] = useState("3");
-  const [stopWin, setStopWin] = useState("500");
-  const [stopLoss, setStopLoss] = useState("100");
+  const [entryValue, setEntryValue] = useState(10);
+  const [position, setPosition] = useState(3);
+  const [stopWin, setStopWin] = useState(500);
+  const [stopLoss, setStopLoss] = useState(100);
   const [selectedModel, setSelectedModel] = useState<AiModel>("grok");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [martingaleEnabled, setMartingaleEnabled] = useState(true);
 
   useEffect(() => {
     if (!user?.id || loaded) return;
@@ -57,17 +66,17 @@ const ConfigPanel = ({
         .maybeSingle();
 
       if (data) {
-        setEntryValue(String(data.entry_value));
-        setPosition(String(data.position));
-        setStopWin(String(data.stop_win));
-        setStopLoss(String(data.stop_loss));
+        setEntryValue(data.entry_value);
+        setPosition(data.position);
+        setStopWin(data.stop_win);
+        setStopLoss(data.stop_loss);
         setSelectedModel(data.model as AiModel);
         onModelChange?.(data.model as AiModel);
       } else if (isLoggedIn && balance > 0) {
         const entry = Math.round(balance * 0.05);
-        setEntryValue(String(entry));
-        setStopWin(String(entry * 10));
-        setStopLoss(String(entry * 5));
+        setEntryValue(entry);
+        setStopWin(entry * 10);
+        setStopLoss(entry * 5);
       }
 
       setLoaded(true);
@@ -76,23 +85,16 @@ const ConfigPanel = ({
     void loadConfig();
   }, [user?.id, loaded, isLoggedIn, balance]);
 
-  const models: { id: AiModel; label: string }[] = [
-    { id: "grok", label: "Grok 4.1" },
-    { id: "claude", label: "Claude 4.5" },
-    { id: "gpt", label: "GPT 5.1" },
-  ];
-
   const buildConfig = (): BotConfig => ({
-    entryValue: parseFloat(entryValue) || 0,
-    position: parseInt(position) || 0,
-    stopWin: parseFloat(stopWin) || 0,
-    stopLoss: parseFloat(stopLoss) || 0,
+    entryValue,
+    position: martingaleEnabled ? position : 0,
+    stopWin,
+    stopLoss,
     model: selectedModel,
   });
 
   const handleSave = async () => {
     if (!user?.id) return;
-
     setSaving(true);
 
     try {
@@ -120,15 +122,10 @@ const ConfigPanel = ({
       if (readError) throw readError;
 
       if (existing?.id) {
-        const { error } = await supabase
-          .from("bot_configs")
-          .update(payload)
-          .eq("id", existing.id);
-
+        const { error } = await supabase.from("bot_configs").update(payload).eq("id", existing.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from("bot_configs").insert(payload);
-
         if (error) throw error;
       }
 
@@ -140,132 +137,155 @@ const ConfigPanel = ({
     }
   };
 
-  const handleStart = () => {
-    onStart(buildConfig());
-  };
+  const handleStart = () => onStart(buildConfig());
+
+  const maxEntry = Math.max(balance || 1000, 1000);
+  const maxStop = Math.max(balance * 2 || 5000, 5000);
 
   return (
-    <div className="bg-card rounded-lg border border-border p-4">
-      <h2 className="text-xs font-heading font-semibold text-muted-foreground tracking-wider uppercase mb-4">
-        Configuração
-      </h2>
-
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1.5 block">
-              Valor de Entrada
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                R$
-              </span>
-              <Input
-                type="number"
-                value={entryValue}
-                onChange={(e) => setEntryValue(e.target.value)}
-                className="pl-9 bg-secondary border-border text-foreground"
-                disabled={isRunning}
-              />
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-muted-foreground">Posição</label>
-              <span className="text-xs text-primary">2x</span>
-            </div>
-            <Input
-              type="number"
-              value={position}
-              onChange={(e) => setPosition(e.target.value)}
-              className="bg-secondary border-border text-foreground"
-              disabled={isRunning}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1.5 block">
-              Stop Win
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                R$
-              </span>
-              <Input
-                type="number"
-                value={stopWin}
-                onChange={(e) => setStopWin(e.target.value)}
-                className="pl-9 bg-secondary border-border text-foreground"
-                disabled={isRunning}
-              />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1.5 block">
-              Stop Loss
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                R$
-              </span>
-              <Input
-                type="number"
-                value={stopLoss}
-                onChange={(e) => setStopLoss(e.target.value)}
-                className="pl-9 bg-secondary border-border text-foreground text-chart-red"
-                disabled={isRunning}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          {models.map((model) => (
-            <Button
+    <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+      {/* Model selector chips */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground mr-1">Modelo IA</span>
+        {models.map((model) => {
+          const Icon = model.icon;
+          const active = selectedModel === model.id;
+          return (
+            <button
               key={model.id}
-              variant={selectedModel === model.id ? "trading" : "trading-ghost"}
-              size="sm"
-              className="text-xs"
-              onClick={() => { setSelectedModel(model.id); onModelChange?.(model.id); }}
+              onClick={() => {
+                if (!isRunning) {
+                  setSelectedModel(model.id);
+                  onModelChange?.(model.id);
+                }
+              }}
               disabled={isRunning}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                active
+                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                  : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+              } ${isRunning ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
             >
+              <Icon size={12} />
               {model.label}
-            </Button>
-          ))}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sliders grid */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        {/* Entry Value */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Entrada</span>
+            <span className="text-xs font-bold text-foreground">R$ {entryValue}</span>
+          </div>
+          <Slider
+            value={[entryValue]}
+            onValueChange={([v]) => setEntryValue(v)}
+            min={1}
+            max={maxEntry}
+            step={1}
+            disabled={isRunning}
+            className="[&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+          />
         </div>
 
-        {isRunning ? (
-          <Button
-            variant="destructive"
-            className="w-full"
-            onClick={onStop}
-            disabled={isProcessing}
-          >
-            {isProcessing ? "Processando..." : "Stop"}
-          </Button>
-        ) : (
-          <div className="space-y-2">
-            <Button
-              variant="trading-ghost"
-              className="w-full"
-              onClick={handleSave}
-              disabled={!isLoggedIn || saving}
-            >
-              {!isLoggedIn ? "Login Necessário" : saving ? "Salvando..." : "Salvar"}
-            </Button>
-            <Button
-              variant="trading"
-              className="w-full"
-              onClick={handleStart}
-              disabled={!isLoggedIn}
-            >
-              {isLoggedIn ? "Start" : "Login Necessário"}
-            </Button>
+        {/* Stop Win */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Stop Win</span>
+            <span className="text-xs font-bold text-chart-green">R$ {stopWin}</span>
           </div>
-        )}
+          <Slider
+            value={[stopWin]}
+            onValueChange={([v]) => setStopWin(v)}
+            min={10}
+            max={maxStop}
+            step={10}
+            disabled={isRunning}
+            className="[&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-chart-green [&>span:first-child>span]:bg-chart-green"
+          />
+        </div>
+
+        {/* Stop Loss */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Stop Loss</span>
+            <span className="text-xs font-bold text-chart-red">R$ {stopLoss}</span>
+          </div>
+          <Slider
+            value={[stopLoss]}
+            onValueChange={([v]) => setStopLoss(v)}
+            min={10}
+            max={maxStop}
+            step={10}
+            disabled={isRunning}
+            className="[&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-chart-red [&>span:first-child>span]:bg-chart-red"
+          />
+        </div>
+
+        {/* Martingale */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Martingale</span>
+              <Switch
+                checked={martingaleEnabled}
+                onCheckedChange={setMartingaleEnabled}
+                disabled={isRunning}
+                className="scale-75 origin-left"
+              />
+            </div>
+            {martingaleEnabled && (
+              <span className="text-xs font-bold text-foreground">x{position}</span>
+            )}
+          </div>
+          {martingaleEnabled && (
+            <Slider
+              value={[position]}
+              onValueChange={([v]) => setPosition(v)}
+              min={1}
+              max={10}
+              step={1}
+              disabled={isRunning}
+              className="[&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-yellow-500 [&>span:first-child>span]:bg-yellow-500"
+            />
+          )}
+        </div>
       </div>
+
+      {/* Action buttons */}
+      {isRunning ? (
+        <button
+          onClick={onStop}
+          disabled={isProcessing}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-heading font-bold text-sm uppercase tracking-wider bg-gradient-to-r from-chart-red to-red-600 text-white shadow-lg shadow-chart-red/20 hover:shadow-chart-red/40 transition-all duration-300 disabled:opacity-50"
+        >
+          <Square size={16} />
+          {isProcessing ? "Processando..." : "Parar Bot"}
+        </button>
+      ) : (
+        <div className="flex gap-2">
+          <button
+            onClick={handleSave}
+            disabled={!isLoggedIn || saving}
+            className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          >
+            <Save size={14} />
+            {saving ? "..." : "Salvar"}
+          </button>
+          <button
+            onClick={handleStart}
+            disabled={!isLoggedIn}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-heading font-bold text-sm uppercase tracking-wider bg-gradient-to-r from-chart-green to-emerald-500 text-white shadow-lg shadow-chart-green/20 hover:shadow-chart-green/40 transition-all duration-300 disabled:opacity-50"
+          >
+            <Play size={16} />
+            {isLoggedIn ? "Iniciar Bot" : "Login Necessário"}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -491,12 +491,16 @@ export const useTradingBot = () => {
   const winRate = operations > 0 ? (wins / operations) * 100 : 0;
 
   const clearHistory = useCallback(() => {
+    botRef.current.trades = [];
+    botRef.current.profitLoss = 0;
+    botRef.current.wins = 0;
+    botRef.current.losses = 0;
+    botRef.current.operations = 0;
     setTrades([]);
     setProfitLoss(0);
     setWins(0);
     setLosses(0);
     setOperations(0);
-    botRef.current.profitLoss = 0;
     persistNow();
   }, [persistNow]);
 

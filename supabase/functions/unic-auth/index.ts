@@ -59,13 +59,92 @@ Deno.serve(async (req) => {
       return json({ error: "Usuário ou senha inválidos" });
     }
 
-    const brokerResponse = await fetch("https://www.alphainvestbot.com/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user: brokerUser, pass: brokerPass }),
+    // Login directly to UnicBroker
+    const UNIC_BASE = "https://unicbroker.com";
+
+    // Step 1: Get XSRF token
+    const initRes = await fetch(`${UNIC_BASE}/login`, {
+      method: "GET",
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", Accept: "text/html" },
+      redirect: "follow",
     });
 
-    const brokerData = await brokerResponse.json();
+    const cookieMap = new Map<string, string>();
+    const allCookies = (initRes.headers as any).getSetCookie?.() as string[] | undefined;
+    if (allCookies) {
+      for (const c of allCookies) {
+        const cookiePart = c.split(";")[0];
+        const eqIdx = cookiePart.indexOf("=");
+        if (eqIdx > 0) cookieMap.set(cookiePart.substring(0, eqIdx), cookiePart);
+      }
+    }
+
+    const xsrfCookie = cookieMap.get("XSRF-TOKEN");
+    if (!xsrfCookie) throw new Error("Falha na autenticação");
+    const xsrfToken = decodeURIComponent(xsrfCookie.split("=").slice(1).join("="));
+    const initCookies = Array.from(cookieMap.values()).join("; ");
+
+    // Step 2: Login to UnicBroker
+    const brokerResponse = await fetch(`${UNIC_BASE}/publicapi/auth/login/web`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-XSRF-TOKEN": xsrfToken,
+        "X-Requested-With": "XMLHttpRequest",
+        Cookie: initCookies,
+        Referer: `${UNIC_BASE}/login`,
+        Origin: UNIC_BASE,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ user: brokerUser, pass: brokerPass }),
+      redirect: "manual",
+    });
+
+    const brokerBody = await brokerResponse.text();
+
+    if (brokerBody.includes('"error"') || brokerBody.includes("não conferem")) {
+      return json({ error: "Usuário ou senha inválidos" });
+    }
+
+    // Merge login cookies
+    const loginCookies = (brokerResponse.headers as any).getSetCookie?.() as string[] | undefined;
+    if (loginCookies) {
+      for (const c of loginCookies) {
+        const cookiePart = c.split(";")[0];
+        const eqIdx = cookiePart.indexOf("=");
+        if (eqIdx > 0) cookieMap.set(cookiePart.substring(0, eqIdx), cookiePart);
+      }
+    }
+    const sessionCookies = Array.from(cookieMap.values()).join("; ");
+
+    // Step 3: Get user credits from UnicBroker
+    const newXsrf = cookieMap.get("XSRF-TOKEN");
+    const finalXsrf = newXsrf ? decodeURIComponent(newXsrf.split("=").slice(1).join("=")) : xsrfToken;
+
+    const creditsRes = await fetch(`${UNIC_BASE}/publicapi/users/get-credits`, {
+      headers: {
+        Cookie: sessionCookies,
+        "X-XSRF-TOKEN": finalXsrf,
+        "X-Requested-With": "XMLHttpRequest",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "application/json",
+        Referer: `${UNIC_BASE}/traderoom`,
+      },
+    });
+    const creditsData = await creditsRes.json();
+
+    // Build broker data from UnicBroker response
+    const brokerData = {
+      status: "success",
+      access_token: "unic_session",
+      ws_token: "",
+      id: creditsData.id ?? 0,
+      login: brokerUser,
+      name: creditsData.name ?? brokerUser,
+      credit: creditsData.credit ?? creditsData.amount ?? "0",
+      credit_cents: creditsData.credit_cents ?? 0,
+    };
 
     if (!brokerResponse.ok || brokerData?.status !== "success" || !brokerData?.access_token) {
       return json({ error: "Usuário ou senha inválidos" });

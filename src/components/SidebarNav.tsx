@@ -1,6 +1,6 @@
 import { History, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import logoImg from "@/assets/alphabot.png";
+
 
 interface SidebarNavProps {
   onHistoryClick: () => void;

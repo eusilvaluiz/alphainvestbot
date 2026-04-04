@@ -1,4 +1,9 @@
-const API_BASE = "/alpha-api";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const IS_DEV = import.meta.env.DEV;
+
+// In dev, use Vite proxy; in production, use edge function
+const API_BASE = IS_DEV ? "/alpha-api" : `${SUPABASE_URL}/functions/v1/alpha-proxy`;
 
 export interface Symbol {
   id: number;

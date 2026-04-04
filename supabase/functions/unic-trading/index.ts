@@ -140,6 +140,45 @@ function getCsrfFromCookies(cookies: string): string {
   return decodeURIComponent(match[1]);
 }
 
+/** Refresh XSRF token by hitting a page and merging new cookies */
+async function refreshXsrf(session: SessionData): Promise<SessionData> {
+  try {
+    const res = await fetch(`${UNIC_BASE}/traderoom`, {
+      headers: {
+        Cookie: session.cookies,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "text/html",
+      },
+      redirect: "follow",
+    });
+    await res.text(); // consume body
+
+    const cookieMap = new Map<string, string>();
+    // Parse existing cookies
+    for (const c of session.cookies.split("; ")) {
+      const eqIdx = c.indexOf("=");
+      if (eqIdx > 0) cookieMap.set(c.substring(0, eqIdx), c);
+    }
+    // Merge new cookies
+    const setCookies = (res.headers as any).getSetCookie?.() as string[] | undefined;
+    if (setCookies) {
+      for (const c of setCookies) {
+        const cookiePart = c.split(";")[0];
+        const eqIdx = cookiePart.indexOf("=");
+        if (eqIdx > 0) cookieMap.set(cookiePart.substring(0, eqIdx), cookiePart);
+      }
+    }
+    const newCookies = Array.from(cookieMap.values()).join("; ");
+    const xsrfCookie = cookieMap.get("XSRF-TOKEN");
+    const newXsrf = xsrfCookie ? decodeURIComponent(xsrfCookie.split("=").slice(1).join("=")) : session.xsrf;
+    console.log("XSRF refreshed successfully");
+    return { cookies: newCookies, xsrf: newXsrf, accountId: session.accountId };
+  } catch (e) {
+    console.error("Failed to refresh XSRF:", e);
+    return session;
+  }
+}
+
 /** GET /symbols — List available trading symbols */
 async function handleSymbols(session: SessionData) {
   const res = await fetch(`${UNIC_BASE}/publicapi/traderoom/symbols/get`, {

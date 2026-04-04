@@ -219,7 +219,7 @@ const SymbolPickerModal = ({
   }, [symbols, search, activeCategory]);
 
   return (
-    <div className="absolute top-full left-0 mt-2 bg-card border border-border rounded-xl shadow-2xl z-50 w-96 overflow-hidden">
+    <div className="absolute top-full left-0 mt-2 bg-card border border-border rounded-xl shadow-2xl z-50 w-[calc(100vw-2rem)] sm:w-96 overflow-hidden">
       {/* Category Tabs */}
       <div className="flex items-center gap-1 px-2 pt-2 pb-1 overflow-x-auto scrollbar-none">
         {CATEGORY_TABS.map((tab) => (
@@ -572,21 +572,21 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 gap-2">
         {/* Left: symbol picker */}
-        <div className="flex items-center gap-3 relative">
+        <div className="flex items-center gap-2 relative shrink-0">
           {selectedSymbol && (
-            <img src={selectedSymbol.img} alt={selectedSymbol.name} className="w-7 h-7" />
+            <img src={selectedSymbol.img} alt={selectedSymbol.name} className="w-6 h-6 sm:w-7 sm:h-7" />
           )}
           <div
             className="cursor-pointer"
             onClick={() => setShowDropdown(!showDropdown)}
           >
             <div className="flex items-center gap-1">
-              <span className="font-heading font-semibold text-sm text-foreground">
+              <span className="font-heading font-semibold text-xs sm:text-sm text-foreground truncate max-w-[80px] sm:max-w-none">
                 {selectedSymbol?.name || "Ethereum"}
               </span>
-              <ChevronDown size={14} className="text-muted-foreground" />
+              <ChevronDown size={14} className="text-muted-foreground shrink-0" />
             </div>
           </div>
           {showDropdown && (
@@ -603,11 +603,11 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         </div>
 
         {/* Center: price + stats inline */}
-        <div className="flex items-center gap-4">
-          <span className="text-lg font-heading font-bold text-foreground">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          <span className="text-sm sm:text-lg font-heading font-bold text-foreground whitespace-nowrap">
             ${currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
-          <div className="hidden sm:flex items-center gap-3 text-xs">
+          <div className="hidden md:flex items-center gap-3 text-xs">
             <div className="flex items-center gap-1">
               <span className="text-muted-foreground">A:</span>
               <span className="text-foreground font-medium">${stats.open.toFixed(2)}</span>
@@ -628,15 +628,13 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         </div>
 
         {/* Right: candle countdown + status */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className={`text-sm font-mono font-bold ${candleCountdown <= 10 ? "text-chart-red" : "text-chart-green"}`}>
-              {formatCountdown(candleCountdown)}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${statusColor} animate-pulse-glow`} />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <span className={`text-xs sm:text-sm font-mono font-bold ${candleCountdown <= 10 ? "text-chart-red" : "text-chart-green"}`}>
+            {formatCountdown(candleCountdown)}
+          </span>
+          <div className="flex items-center gap-1">
+            <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${statusColor} animate-pulse-glow`} />
+            <span className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-wider hidden sm:inline">
               {statusLabel}
             </span>
           </div>

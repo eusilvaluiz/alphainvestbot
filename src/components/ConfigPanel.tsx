@@ -145,8 +145,8 @@ const ConfigPanel = ({
   return (
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
       {/* Model selector chips */}
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground mr-1">Modelo IA</span>
+      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground mr-0.5 sm:mr-1">IA</span>
         {models.map((model) => {
           const Icon = model.icon;
           const active = selectedModel === model.id;
@@ -160,13 +160,13 @@ const ConfigPanel = ({
                 }
               }}
               disabled={isRunning}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+              className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 ${
                 active
                   ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
                   : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80"
               } ${isRunning ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
             >
-              <Icon size={12} />
+              <Icon size={11} />
               {model.label}
             </button>
           );

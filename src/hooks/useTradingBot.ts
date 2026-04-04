@@ -305,9 +305,17 @@ export const useTradingBot = () => {
         if (!botRef.current.running || !settlement || !txn) return;
 
         const balanceData = await alphaApi.getBalance();
-        const isWin =
-          settlement.result_type === 2 || txn.transaction.status_id === 2;
-        const resultAmount = settlement.amount_result_cents / 100;
+        
+        // Debug: log raw API responses to understand win/loss mapping
+        console.log("[Bot] Settlement:", JSON.stringify({ result_type: settlement.result_type, amount_result_cents: settlement.amount_result_cents }));
+        console.log("[Bot] Transaction:", JSON.stringify({ status_id: txn.transaction.status_id, status: txn.transaction.status, returns_cents: txn.transaction.returns_cents, amount_cents: txn.transaction.amount_cents }));
+
+        // Use returns_cents as source of truth: positive = win, zero/negative = loss
+        const returnsCents = txn.transaction.returns_cents;
+        const isWin = returnsCents > 0;
+        const resultAmount = returnsCents / 100;
+
+        console.log("[Bot] isWin:", isWin, "returnsCents:", returnsCents, "resultAmount:", resultAmount);
 
         setTrades((prev) =>
           prev.map((t) =>

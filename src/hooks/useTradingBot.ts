@@ -285,13 +285,21 @@ export const useTradingBot = () => {
         let settlement: Awaited<ReturnType<typeof alphaApi.getSettlement>> | null = null;
         let txn: Awaited<ReturnType<typeof alphaApi.getTransaction>> | null = null;
 
-        for (let attempt = 0; attempt < 20; attempt += 1) {
-          if (!botRef.current.running) return;
-          settlement = await alphaApi.getSettlement();
-          txn = await alphaApi.getTransaction(result.transaction_id);
-          const statusId = txn.transaction.status_id;
-          if (statusId === 1 || statusId === 2) break;
-          if (attempt < 19) await new Promise((r) => setTimeout(r, attempt < 3 ? 100 : 200));
+        // Check immediately first — no delay
+        settlement = await alphaApi.getSettlement();
+        txn = await alphaApi.getTransaction(result.transaction_id);
+        let settled = txn.transaction.status_id === 1 || txn.transaction.status_id === 2;
+
+        if (!settled) {
+          // Poll with short intervals if not ready yet
+          for (let attempt = 0; attempt < 30; attempt += 1) {
+            if (!botRef.current.running) return;
+            await new Promise((r) => setTimeout(r, attempt < 5 ? 80 : 150));
+            settlement = await alphaApi.getSettlement();
+            txn = await alphaApi.getTransaction(result.transaction_id);
+            const statusId = txn.transaction.status_id;
+            if (statusId === 1 || statusId === 2) { settled = true; break; }
+          }
         }
 
         if (!botRef.current.running || !settlement || !txn) return;

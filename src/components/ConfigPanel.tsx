@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
+
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -177,81 +177,72 @@ const ConfigPanel = ({
       <div className="grid grid-cols-2 gap-x-4 gap-y-3">
         {/* Entry Value */}
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Entrada</span>
-            <span className="text-xs font-bold text-foreground">R$ {entryValue}</span>
+          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 block">Entrada</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">R$</span>
+            <input
+              type="number"
+              value={entryValue}
+              onChange={(e) => setEntryValue(Number(e.target.value) || 0)}
+              disabled={isRunning}
+              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-foreground outline-none focus:border-primary/50 transition-colors disabled:opacity-50"
+            />
           </div>
-          <Slider
-            value={[entryValue]}
-            onValueChange={([v]) => setEntryValue(v)}
-            min={1}
-            max={maxEntry}
-            step={1}
-            disabled={isRunning}
-            className="[&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
-          />
         </div>
 
         {/* Stop Win */}
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Stop Win</span>
-            <span className="text-xs font-bold text-chart-green">R$ {stopWin}</span>
+          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 block">Stop Win</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">R$</span>
+            <input
+              type="number"
+              value={stopWin}
+              onChange={(e) => setStopWin(Number(e.target.value) || 0)}
+              disabled={isRunning}
+              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-chart-green outline-none focus:border-chart-green/50 transition-colors disabled:opacity-50"
+            />
           </div>
-          <Slider
-            value={[stopWin]}
-            onValueChange={([v]) => setStopWin(v)}
-            min={10}
-            max={maxStop}
-            step={10}
-            disabled={isRunning}
-            className="[&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-chart-green [&>span:first-child>span]:bg-chart-green"
-          />
         </div>
 
         {/* Stop Loss */}
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Stop Loss</span>
-            <span className="text-xs font-bold text-chart-red">R$ {stopLoss}</span>
+          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 block">Stop Loss</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">R$</span>
+            <input
+              type="number"
+              value={stopLoss}
+              onChange={(e) => setStopLoss(Number(e.target.value) || 0)}
+              disabled={isRunning}
+              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-chart-red outline-none focus:border-chart-red/50 transition-colors disabled:opacity-50"
+            />
           </div>
-          <Slider
-            value={[stopLoss]}
-            onValueChange={([v]) => setStopLoss(v)}
-            min={10}
-            max={maxStop}
-            step={10}
-            disabled={isRunning}
-            className="[&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-chart-red [&>span:first-child>span]:bg-chart-red"
-          />
         </div>
 
         {/* Martingale */}
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Martingale</span>
-              <Switch
-                checked={martingaleEnabled}
-                onCheckedChange={setMartingaleEnabled}
-                disabled={isRunning}
-                className="scale-75 origin-left"
-              />
-            </div>
-            {martingaleEnabled && (
-              <span className="text-xs font-bold text-foreground">x{position}</span>
-            )}
+          <div className="flex items-center gap-2 mb-1.5">
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Martingale</label>
+            <Switch
+              checked={martingaleEnabled}
+              onCheckedChange={setMartingaleEnabled}
+              disabled={isRunning}
+              className="scale-75 origin-left"
+            />
           </div>
-          {martingaleEnabled && (
-            <Slider
-              value={[position]}
-              onValueChange={([v]) => setPosition(v)}
+          {martingaleEnabled ? (
+            <input
+              type="number"
+              value={position}
+              onChange={(e) => setPosition(Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
+              disabled={isRunning}
               min={1}
               max={10}
-              step={1}
-              disabled={isRunning}
-              className="[&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-yellow-500 [&>span:first-child>span]:bg-yellow-500"
+              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-foreground outline-none focus:border-yellow-500/50 transition-colors disabled:opacity-50"
             />
+          ) : (
+            <div className="py-2 text-xs text-muted-foreground">Desativado</div>
           )}
         </div>
       </div>

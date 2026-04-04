@@ -205,9 +205,11 @@ const ConfigPanel = ({
               inputMode="numeric"
               value={position}
               onChange={(e) => {
-                const v = Number(e.target.value.replace(/[^0-9]/g, "")) || 1;
-                setPosition(Math.min(10, Math.max(1, v)));
+                const raw = e.target.value.replace(/[^0-9]/g, "");
+                if (raw === "") { setPosition(0 as any); return; }
+                setPosition(Math.min(10, Math.max(1, Number(raw))));
               }}
+              onBlur={() => { if (!position || position < 1) setPosition(1); }}
               disabled={isRunning}
               className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs font-bold text-foreground outline-none focus:border-yellow-500/50 transition-colors disabled:opacity-50"
             />

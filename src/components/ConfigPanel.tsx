@@ -173,54 +173,22 @@ const ConfigPanel = ({
         })}
       </div>
 
-      {/* Sliders grid */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-        {/* Entry Value */}
+      {/* Row 1: Entrada + Martingale */}
+      <div className="grid grid-cols-2 gap-x-4">
         <div>
           <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 block">Entrada</label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">R$</span>
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
               value={entryValue}
-              onChange={(e) => setEntryValue(Number(e.target.value) || 0)}
+              onChange={(e) => setEntryValue(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
               disabled={isRunning}
               className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-foreground outline-none focus:border-primary/50 transition-colors disabled:opacity-50"
             />
           </div>
         </div>
-
-        {/* Stop Win */}
-        <div>
-          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 block">Stop Win</label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">R$</span>
-            <input
-              type="number"
-              value={stopWin}
-              onChange={(e) => setStopWin(Number(e.target.value) || 0)}
-              disabled={isRunning}
-              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-chart-green outline-none focus:border-chart-green/50 transition-colors disabled:opacity-50"
-            />
-          </div>
-        </div>
-
-        {/* Stop Loss */}
-        <div>
-          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 block">Stop Loss</label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">R$</span>
-            <input
-              type="number"
-              value={stopLoss}
-              onChange={(e) => setStopLoss(Number(e.target.value) || 0)}
-              disabled={isRunning}
-              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-chart-red outline-none focus:border-chart-red/50 transition-colors disabled:opacity-50"
-            />
-          </div>
-        </div>
-
-        {/* Martingale */}
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Martingale</label>
@@ -233,17 +201,51 @@ const ConfigPanel = ({
           </div>
           {martingaleEnabled ? (
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
               value={position}
-              onChange={(e) => setPosition(Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
+              onChange={(e) => {
+                const v = Number(e.target.value.replace(/[^0-9]/g, "")) || 1;
+                setPosition(Math.min(10, Math.max(1, v)));
+              }}
               disabled={isRunning}
-              min={1}
-              max={10}
               className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-foreground outline-none focus:border-yellow-500/50 transition-colors disabled:opacity-50"
             />
           ) : (
             <div className="py-2 text-xs text-muted-foreground">Desativado</div>
           )}
+        </div>
+      </div>
+
+      {/* Row 2: Stop Win + Stop Loss */}
+      <div className="grid grid-cols-2 gap-x-4">
+        <div>
+          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 block">Stop Win</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">R$</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={stopWin}
+              onChange={(e) => setStopWin(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
+              disabled={isRunning}
+              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-chart-green outline-none focus:border-chart-green/50 transition-colors disabled:opacity-50"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 block">Stop Loss</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">R$</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={stopLoss}
+              onChange={(e) => setStopLoss(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
+              disabled={isRunning}
+              className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-xs font-bold text-chart-red outline-none focus:border-chart-red/50 transition-colors disabled:opacity-50"
+            />
+          </div>
         </div>
       </div>
 

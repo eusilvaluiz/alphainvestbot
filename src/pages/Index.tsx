@@ -102,7 +102,10 @@ const Index = () => {
             <CandlestickChart
               selectedSymbol={selectedSymbol}
               symbols={symbols}
-              onSymbolChange={setSelectedSymbol}
+              onSymbolChange={(s) => {
+                setSelectedSymbol(s);
+                localStorage.setItem("selected_symbol_code", s.code);
+              }}
               onPriceUpdate={handlePriceUpdate}
               activeTrades={bot.trades}
             />

@@ -392,23 +392,44 @@ async function handleOpenPosition(
 /** GET /settlement — Check trade result */
 async function handleSettlement(session: SessionData) {
   const accountId = session.accountId;
-  const res = await fetch(
-    `${UNIC_BASE}/binary/transactions/settlement?account_id=${accountId}`,
-    { headers: makeHeaders(session) }
-  );
+  // Try with account_id first, then without
+  const urls = accountId != null
+    ? [`${UNIC_BASE}/binary/transactions/settlement?account_id=${accountId}`, `${UNIC_BASE}/binary/transactions/settlement`]
+    : [`${UNIC_BASE}/binary/transactions/settlement`];
 
-  const data = await res.json();
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { headers: makeHeaders(session) });
+      const data = await res.json();
+      console.log("Settlement response:", JSON.stringify(data).substring(0, 500));
+      if (data.status !== "error") {
+        return {
+          status: data.status ?? "success",
+          img: data.img ?? "",
+          updated: data.updated ?? 0,
+          amount_result: data.amount_result ?? "0",
+          currency_code: data.currency_code ?? "BRL",
+          amount_result_cents: data.amount_result_cents ?? 0,
+          result_type: data.result_type ?? 0,
+          user_credit: data.user_credit ?? "0",
+          transaction_account: data.transaction_account ?? accountId,
+        };
+      }
+    } catch (e) {
+      console.error("Settlement fetch error:", e);
+    }
+  }
 
   return {
-    status: data.status ?? "success",
-    img: data.img ?? "",
-    updated: data.updated ?? 0,
-    amount_result: data.amount_result ?? "0",
-    currency_code: data.currency_code ?? "BRL",
-    amount_result_cents: data.amount_result_cents ?? 0,
-    result_type: data.result_type ?? 0,
-    user_credit: data.user_credit ?? "0",
-    transaction_account: data.transaction_account ?? accountId,
+    status: "error",
+    img: "",
+    updated: 0,
+    amount_result: "0",
+    currency_code: "BRL",
+    amount_result_cents: 0,
+    result_type: 0,
+    user_credit: "0",
+    transaction_account: accountId,
   };
 }
 

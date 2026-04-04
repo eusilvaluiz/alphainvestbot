@@ -169,17 +169,18 @@ export const useTradingBot = () => {
 
   const waitUntilTimestamp = useCallback((targetTimestamp: number): Promise<void> => {
     return new Promise((resolve) => {
-      const resolveIfReady = () => {
+      const now = Math.floor(Date.now() / 1000);
+      if (now >= targetTimestamp || !botRef.current.running) {
+        resolve();
+        return;
+      }
+      const checkInterval = setInterval(() => {
         const now = Math.floor(Date.now() / 1000);
         if (now >= targetTimestamp || !botRef.current.running) {
-          if (checkInterval) clearInterval(checkInterval);
+          clearInterval(checkInterval);
           resolve();
-          return true;
         }
-        return false;
-      };
-      if (resolveIfReady()) return;
-      const checkInterval = setInterval(resolveIfReady, 100);
+      }, 100);
     });
   }, []);
 

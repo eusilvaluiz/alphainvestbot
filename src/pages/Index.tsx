@@ -30,10 +30,10 @@ const Index = () => {
 
   const lastTradeDirection = bot.trades.length > 0 ? bot.trades[0].direction : null;
 
-  useEffect(() => {
+  const loadSymbols = () => {
     alphaApi.getSymbols().then((syms) => {
+      if (syms.length === 0) return;
       setSymbols(syms);
-      // Check persisted bot state for the active symbol
       const savedState = localStorage.getItem("alpha_bot_state");
       let restoredSymbol: ApiSymbol | null = null;
       if (savedState) {
@@ -46,9 +46,21 @@ const Index = () => {
       }
       setSelectedSymbol(restoredSymbol || syms.find((s) => s.code === "ETHUSDT") || syms[0] || null);
       bot.resumeBot(syms);
-    });
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadSymbols();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-fetch symbols when broker connects (symbols require auth)
+  useEffect(() => {
+    if (isBrokerConnected && symbols.length === 0) {
+      loadSymbols();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBrokerConnected]);
 
   const handleStart = (config: any) => {
     if (!selectedSymbol) {

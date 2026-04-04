@@ -225,7 +225,7 @@ export const useTradingBot = () => {
 
       try {
         const entryTimestamp =
-          scheduledEntryTimestamp ?? getRandomFirstEntryTimestamp();
+          scheduledEntryTimestamp ?? getFirstEntryTimestamp();
 
         await waitUntilTimestamp(entryTimestamp);
         if (!botRef.current.running) return;

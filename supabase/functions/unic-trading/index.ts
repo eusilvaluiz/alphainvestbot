@@ -400,7 +400,7 @@ async function handleTransaction(session: SessionData, transactionId: number) {
 
   try {
     // Get first page to learn pagination
-    const firstRes = await fetch(`${UNIC_BASE}/binary/history/1`, {
+    const firstRes = await fetch(`${UNIC_BASE}/binary/history/1?account_id=${session.accountId ?? 0}`, {
       headers: makeHeaders(session),
     });
     const firstData = await firstRes.json();
@@ -412,7 +412,7 @@ async function handleTransaction(session: SessionData, transactionId: number) {
 
     // Search from last page backwards (most recent first)
     for (let page = totalPages; page >= Math.max(1, totalPages - 5) && !transaction; page--) {
-      const data = page === 1 ? firstData : await (await fetch(`${UNIC_BASE}/binary/history/${page}`, { headers: makeHeaders(session) })).json();
+      const data = page === 1 ? firstData : await (await fetch(`${UNIC_BASE}/binary/history/${page}?account_id=${session.accountId ?? 0}`, { headers: makeHeaders(session) })).json();
       const txList = data.data || data.transactions?.data || data.transactions || [];
 
       if (Array.isArray(txList)) {

@@ -24,7 +24,7 @@ const SidebarNav = ({ onHistoryClick }: SidebarNavProps) => {
           className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/20 transition-colors"
           title="Histórico"
         >
-          <History size={18} />
+          <History size={18} className="text-green-500 bg-gray-600" />
         </button>
       </div>
 

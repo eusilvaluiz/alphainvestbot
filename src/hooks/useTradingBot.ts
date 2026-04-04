@@ -13,7 +13,7 @@ export interface TradeEntry {
   amountFormatted: string;
   expirationTimestamp: number;
   expirationSeconds: number;
-  status: "open" | "win" | "loss" | "processing";
+  status: "open" | "win" | "loss" | "draw" | "processing";
   result?: number;
   martingaleLevel?: number;
 }
@@ -69,24 +69,32 @@ const getTradeOutcomeFromPrice = (
   trade: TradeEntry,
   closePrice: number,
   odd: number
-) => {
+): { outcome: "win" | "loss" | "draw"; resultAmount: number } => {
   const normalizedOdd = Number.isFinite(odd) ? odd : 0;
+
+  // Draw: price didn't move
+  if (closePrice === trade.entryPrice) {
+    return { outcome: "draw", resultAmount: 0 };
+  }
+
   const isWin = trade.direction === "up"
     ? closePrice > trade.entryPrice
     : closePrice < trade.entryPrice;
-  // odd comes as a multiplier (e.g. 1.80 = 80% profit) or as percentage (e.g. 80)
+
   const profitAmount = Number(
     (normalizedOdd > 10
-      ? (trade.amount * normalizedOdd) / 100   // percentage: 80 → 80%
-      : trade.amount * (normalizedOdd - 1)      // multiplier: 1.80 → 80%
+      ? (trade.amount * normalizedOdd) / 100
+      : trade.amount * (normalizedOdd - 1)
     ).toFixed(2)
   );
 
   return {
-    isWin,
+    outcome: isWin ? "win" : "loss",
     resultAmount: isWin ? profitAmount : -trade.amount,
   };
 };
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 function loadState(): PersistedBotState | null {
   try {
@@ -345,23 +353,61 @@ export const useTradingBot = () => {
 
         await waitForExpiration(result.expiration_timestamp);
 
-        const closePrice = botRef.current.currentPrice > 0
-          ? botRef.current.currentPrice
-          : trade.currentPrice > 0
-            ? trade.currentPrice
-            : trade.entryPrice;
-        const { isWin, resultAmount } = getTradeOutcomeFromPrice(
-          trade,
-          closePrice,
-          result.odd
-        );
+       // Poll the broker for the real result
+       let outcome: "win" | "loss" | "draw" = "loss";
+       let resultAmount = -trade.amount;
+       let realClosePrice = botRef.current.currentPrice || trade.currentPrice || trade.entryPrice;
 
-        const updatedTrades = botRef.current.trades.map((t) =>
+       for (let attempt = 0; attempt < 5; attempt++) {
+         await sleep(2000);
+         try {
+           const txData = await alphaApi.getTransaction(result.transaction_id);
+           if (txData.status === "success" && txData.transaction.status !== "Pendente") {
+             const tx = txData.transaction;
+             console.log("[Bot] Broker result:", tx.status, "returns_cents:", tx.returns_cents, "amount_cents:", tx.amount_cents);
+
+             if (tx.symbol_price && tx.symbol_price !== "0") {
+               realClosePrice = Number(tx.symbol_price);
+             }
+
+             if (tx.status === "Ganhou") {
+               outcome = "win";
+               // returns_cents is the profit (not including original amount)
+               resultAmount = tx.returns_cents > 0
+                 ? tx.returns_cents / 100
+                 : Number(((result.odd > 10 ? trade.amount * result.odd / 100 : trade.amount * (result.odd - 1))).toFixed(2));
+             } else if (tx.status === "Empatou") {
+               outcome = "draw";
+               resultAmount = 0;
+             } else {
+               outcome = "loss";
+               resultAmount = -trade.amount;
+             }
+             break;
+           }
+         } catch (e) {
+           console.warn("[Bot] Failed to fetch transaction result, attempt", attempt + 1, e);
+         }
+       }
+
+       // If broker didn't return a result, fallback to local calculation
+       if (outcome === "loss" && resultAmount === -trade.amount) {
+         const localResult = getTradeOutcomeFromPrice(trade, realClosePrice, result.odd);
+         if (localResult.outcome !== "loss") {
+           outcome = localResult.outcome;
+           resultAmount = localResult.resultAmount;
+           console.log("[Bot] Using local fallback:", outcome, resultAmount);
+         }
+       }
+
+       const tradeStatus = outcome === "draw" ? "draw" as const : outcome === "win" ? "win" as const : "loss" as const;
+
+       const updatedTrades = botRef.current.trades.map((t) =>
           t.id === result.transaction_id
             ? {
                 ...t,
-                currentPrice: closePrice,
-                status: isWin ? ("win" as const) : ("loss" as const),
+               currentPrice: realClosePrice,
+               status: tradeStatus,
                 result: resultAmount,
               }
             : t
@@ -370,7 +416,7 @@ export const useTradingBot = () => {
         setTrades(updatedTrades);
 
         let newPL = botRef.current.profitLoss;
-        if (isWin) {
+       if (outcome === "win") {
           botRef.current.wins += 1;
           setWins(botRef.current.wins);
           newPL += resultAmount;
@@ -378,7 +424,14 @@ export const useTradingBot = () => {
           setCurrentMartingaleLevel(0);
           setIsMartingale(false);
           lastDirection.current = null;
-        } else {
+       } else if (outcome === "draw") {
+         // Draw: money returned, no P&L change, no martingale change
+         // Reset martingale since it wasn't a loss
+         martingaleLevel.current = 0;
+         setCurrentMartingaleLevel(0);
+         setIsMartingale(false);
+         lastDirection.current = null;
+       } else {
           botRef.current.losses += 1;
           setLosses(botRef.current.losses);
           newPL += resultAmount;

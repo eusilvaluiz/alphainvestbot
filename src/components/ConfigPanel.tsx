@@ -216,7 +216,7 @@ const ConfigPanel = ({
               type="text"
               disabled
               value="Desativado"
-              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-muted-foreground outline-none disabled:opacity-50"
+              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs text-muted-foreground outline-none disabled:opacity-50"
             />
           )}
         </div>

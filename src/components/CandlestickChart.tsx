@@ -572,21 +572,21 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 gap-2">
         {/* Left: symbol picker */}
-        <div className="flex items-center gap-3 relative">
+        <div className="flex items-center gap-2 relative shrink-0">
           {selectedSymbol && (
-            <img src={selectedSymbol.img} alt={selectedSymbol.name} className="w-7 h-7" />
+            <img src={selectedSymbol.img} alt={selectedSymbol.name} className="w-6 h-6 sm:w-7 sm:h-7" />
           )}
           <div
             className="cursor-pointer"
             onClick={() => setShowDropdown(!showDropdown)}
           >
             <div className="flex items-center gap-1">
-              <span className="font-heading font-semibold text-sm text-foreground">
+              <span className="font-heading font-semibold text-xs sm:text-sm text-foreground truncate max-w-[80px] sm:max-w-none">
                 {selectedSymbol?.name || "Ethereum"}
               </span>
-              <ChevronDown size={14} className="text-muted-foreground" />
+              <ChevronDown size={14} className="text-muted-foreground shrink-0" />
             </div>
           </div>
           {showDropdown && (

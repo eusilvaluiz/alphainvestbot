@@ -291,7 +291,7 @@ export const useTradingBot = () => {
         persistNow();
 
         await waitForExpiration(result.expiration_timestamp);
-        if (!botRef.current.running) return;
+        // Don't abort here — we must settle the open trade even if bot was stopped
 
         const processingTrades = botRef.current.trades.map((t) =>
           t.id === result.transaction_id ? { ...t, status: "processing" as const } : t
@@ -314,7 +314,6 @@ export const useTradingBot = () => {
         if (!settled) {
           // Poll with short intervals if not ready yet
           for (let attempt = 0; attempt < 30; attempt += 1) {
-            if (!botRef.current.running) return;
             await new Promise((r) => setTimeout(r, attempt < 5 ? 80 : 150));
             settlement = await alphaApi.getSettlement();
             txn = await alphaApi.getTransaction(result.transaction_id);
@@ -323,7 +322,7 @@ export const useTradingBot = () => {
           }
         }
 
-        if (!botRef.current.running || !settlement || !txn) return;
+        if (!settlement || !txn) return;
 
         const balanceData = await alphaApi.getBalance();
         

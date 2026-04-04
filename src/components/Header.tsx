@@ -16,8 +16,18 @@ const Header = ({ onLoginClick, onHistoryClick }: HeaderProps) => {
   const displayName = brokerSession?.login || user?.user_metadata?.username || user?.email?.split("@")[0] || "";
 
   return (
-    <header className="h-14 flex items-center justify-between px-6 border-b border-border">
-      <div className="flex-1" />
+    <header className="h-14 flex items-center justify-between px-4 sm:px-6 border-b border-border">
+      <div className="flex-1 flex items-center">
+        {onHistoryClick && (
+          <button
+            onClick={onHistoryClick}
+            className="sm:hidden p-2 rounded-lg hover:bg-secondary transition-colors"
+            title="Histórico"
+          >
+            <History size={20} className="text-muted-foreground" />
+          </button>
+        )}
+      </div>
       <img src={logoImg} alt="Alpha Bot" className="h-10" />
       <div className="flex-1 flex justify-end items-center gap-2">
         {isLoggedIn ? (

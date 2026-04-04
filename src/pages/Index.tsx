@@ -20,6 +20,7 @@ const Index = () => {
   const [symbols, setSymbols] = useState<ApiSymbol[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<ApiSymbol | null>(null);
   const [selectedModel, setSelectedModel] = useState("grok");
+  const [liveBalance, setLiveBalance] = useState<number | null>(null);
 
   const bot = useTradingBot();
 

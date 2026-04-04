@@ -109,7 +109,9 @@ async function doLogin(brokerUser: string, brokerPass: string): Promise<SessionD
        const accMatch3 = trHtml.match(/"accounts"\s*:\s*\[\s*\{[^}]*"id"\s*:\s*(\d+)/);
        if (accMatch3) accountId = parseInt(accMatch3[1]);
      }
-     console.log("doLogin accountId extracted:", accountId);
+     // Default to 0 if not found (valid for some accounts)
+     if (accountId === null) accountId = 0;
+     console.log("doLogin accountId:", accountId);
 
     // Merge traderoom cookies
     const trSetCookies = (trRes.headers as any).getSetCookie?.() as string[] | undefined;
@@ -394,42 +396,40 @@ async function handleSettlement(session: SessionData) {
 
 /** GET /transaction/{id} — Get transaction details */
 async function handleTransaction(session: SessionData, transactionId: number) {
-   // Try multiple history pages to find the transaction
-   let transaction: any = null;
- 
-   for (let page = 1; page <= 3 && !transaction; page++) {
-     try {
-       const res = await fetch(`${UNIC_BASE}/binary/history/${page}`, {
-         headers: makeHeaders(session),
-       });
-       const data = await res.json();
- 
-       if (page === 1) {
-         console.log("History page 1 raw keys:", Object.keys(data), "status:", data.status);
-         const txList = data.transactions?.data || data.data || data.transactions || [];
-         console.log("History txList length:", Array.isArray(txList) ? txList.length : "not-array", "looking for:", transactionId);
-         if (Array.isArray(txList) && txList.length > 0) {
-           console.log("First tx sample:", JSON.stringify(txList[0]).substring(0, 300));
-         }
-       }
- 
-       const txList = data.transactions?.data || data.data || data.transactions || [];
-       if (Array.isArray(txList)) {
-         for (const tx of txList) {
-           if (tx.id === transactionId || tx.transaction_id === transactionId) {
-             transaction = tx;
-             console.log("Found transaction:", JSON.stringify(tx).substring(0, 500));
-             break;
-           }
-         }
-       }
-     } catch (e) {
-       console.error(`History page ${page} error:`, e);
+  let transaction: any = null;
+
+  try {
+    // Get first page to learn pagination
+    const firstRes = await fetch(`${UNIC_BASE}/binary/history/1`, {
+      headers: makeHeaders(session),
+    });
+    const firstData = await firstRes.json();
+    const limit = firstData.limit ?? 10;
+    const total = firstData.total ?? 0;
+    const totalPages = firstData.last_page ?? Math.ceil(total / limit) || 1;
+
+    console.log("History: pages=", totalPages, "total=", total, "target:", transactionId);
+
+    // Search from last page backwards (most recent first)
+    for (let page = totalPages; page >= Math.max(1, totalPages - 5) && !transaction; page--) {
+      const data = page === 1 ? firstData : await (await fetch(`${UNIC_BASE}/binary/history/${page}`, { headers: makeHeaders(session) })).json();
+      const txList = data.data || data.transactions?.data || data.transactions || [];
+
+      if (Array.isArray(txList)) {
+        for (const tx of txList) {
+          if (tx.id === transactionId || tx.transaction_id === transactionId) {
+            transaction = tx;
+            console.log("Found tx:", JSON.stringify(tx).substring(0, 500));
+            break;
+          }
+        }
+      }
     }
+  } catch (e) {
+    console.error("History error:", e);
   }
 
   if (!transaction) {
-    // Return a pending status if not found yet
     return {
       date: new Date().toISOString(),
       status: "pending",
@@ -446,6 +446,7 @@ async function handleTransaction(session: SessionData, transactionId: number) {
         amount_percent: 0,
         returns: "0",
         returns_cents: 0,
+        profit_cents: 0,
         expiration: 0,
         expiration_date: "",
         notes: "",
@@ -454,21 +455,38 @@ async function handleTransaction(session: SessionData, transactionId: number) {
     };
   }
 
-  // Map UnicBroker status to expected format
-   const statusText = String(transaction.status || "").toLowerCase();
-   let statusId = transaction.status_id;
-   if (statusId == null || statusId === undefined) {
-     if (statusText.includes("ganh") || statusText.includes("win")) statusId = 2;
-     else if (statusText.includes("perd") || statusText.includes("loss")) statusId = 1;
-     else if (statusText.includes("empat") || statusText.includes("draw") || statusText.includes("devolv") || statusText.includes("refund")) statusId = 3;
-     else statusId = 0;
-   }
- 
-   // Detect draw by returns == amount (money refunded)
-   const returnsCents = transaction.returns_cents ?? transaction.amount_result_cents ?? 0;
-   const amountCents = transaction.amount_cents ?? 0;
-   const isDraw = statusId === 3 || (statusId !== 1 && statusId !== 2 && returnsCents === amountCents && amountCents > 0);
-   if (isDraw) statusId = 3;
+  // Parse amounts — broker uses "return" field as "37,00" format
+  const returnStr = transaction.return ?? transaction.returns ?? "0";
+  const returnFloat = parseFloat(String(returnStr).replace(/\./g, "").replace(",", "."));
+  const amountStr = transaction.amount ?? "0";
+  const amountFloat = parseFloat(String(amountStr).replace(/\./g, "").replace(",", "."));
+  const returnCents = Math.round(returnFloat * 100);
+  const amountCents = transaction.amount_cents ?? Math.round(amountFloat * 100);
+
+  // Determine outcome by comparing return vs amount (most reliable)
+  let outcome: "Ganhou" | "Perdeu" | "Empatou" | "Pendente";
+  let statusId: number;
+
+  if (returnCents > amountCents) {
+    outcome = "Ganhou";
+    statusId = 2;
+  } else if (returnCents === amountCents && amountCents > 0) {
+    outcome = "Empatou";
+    statusId = 3;
+  } else if (amountCents > 0 && returnCents < amountCents) {
+    outcome = "Perdeu";
+    statusId = 1;
+  } else {
+    outcome = "Pendente";
+    statusId = 0;
+  }
+
+  const profitCents = outcome === "Ganhou" ? returnCents - amountCents
+    : outcome === "Empatou" ? 0
+    : outcome === "Perdeu" ? -amountCents
+    : 0;
+
+  console.log("Tx result:", transactionId, outcome, "amount:", amountCents, "return:", returnCents, "profit:", profitCents);
 
   return {
     date: transaction.date ?? new Date().toISOString(),
@@ -476,24 +494,25 @@ async function handleTransaction(session: SessionData, transactionId: number) {
     transaction: {
       id: transaction.id,
       date: transaction.date ?? "",
-       status: statusId === 2 ? "Ganhou" : statusId === 1 ? "Perdeu" : statusId === 3 ? "Empatou" : "Pendente",
+      status: outcome,
       status_id: statusId,
       direction: transaction.direction ?? 0,
       symbol: transaction.symbol ?? "",
       symbol_price: String(transaction.symbol_price ?? transaction.price ?? "0"),
-      amount: transaction.amount ?? "0",
-      amount_cents: transaction.amount_cents ?? 0,
+      amount: amountStr,
+      amount_cents: amountCents,
       amount_percent: transaction.amount_percent ?? 0,
-      returns: transaction.returns ?? "0",
-       returns_cents: returnsCents,
+      returns: returnStr,
+      returns_cents: returnCents,
+      profit_cents: profitCents,
       expiration: transaction.expiration ?? 0,
       expiration_date: transaction.expiration_date ?? "",
       notes: transaction.notes ?? "",
       user: {
-        id: transaction.user?.id ?? 0,
-        login: transaction.user?.login ?? "",
-        balance: transaction.user?.balance ?? "0",
-        balance_cents: transaction.user?.balance_cents ?? 0,
+        id: transaction.user?.id ?? transaction.user ?? 0,
+        login: "",
+        balance: "0",
+        balance_cents: 0,
       },
     },
   };

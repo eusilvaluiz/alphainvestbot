@@ -318,24 +318,26 @@ export const useTradingBot = () => {
 
         console.log("[Bot] isWin:", isWin, "returnsCents:", returnsCents, "resultAmount:", resultAmount);
 
-        setTrades((prev) =>
-          prev.map((t) =>
-            t.id === result.transaction_id
-              ? {
-                  ...t,
-                  status: isWin ? ("win" as const) : ("loss" as const),
-                  result: isWin ? resultAmount : -trade.amount,
-                }
-              : t
-          )
+        const updatedTrades = botRef.current.trades.map((t) =>
+          t.id === result.transaction_id
+            ? {
+                ...t,
+                status: isWin ? ("win" as const) : ("loss" as const),
+                result: isWin ? resultAmount : -trade.amount,
+              }
+            : t
         );
+        botRef.current.trades = updatedTrades;
+        setTrades(updatedTrades);
 
         let newPL = botRef.current.profitLoss;
         if (isWin) {
-          setWins((prev) => prev + 1);
+          botRef.current.wins += 1;
+          setWins(botRef.current.wins);
           newPL += resultAmount;
         } else {
-          setLosses((prev) => prev + 1);
+          botRef.current.losses += 1;
+          setLosses(botRef.current.losses);
           newPL -= trade.amount;
         }
         setProfitLoss(newPL);

@@ -54,10 +54,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (nextSession?.user) {
         void restoreBrokerSession(nextSession.user.id);
-      } else {
-        setBrokerSession(null);
-        alphaApi.logout();
+        return;
       }
+
+      const hasLocalBrokerCredentials = !!localStorage.getItem("broker_credentials");
+      const hasLocalBrokerSession = !!localStorage.getItem("alpha_session");
+
+      if (hasLocalBrokerCredentials || hasLocalBrokerSession) {
+        return;
+      }
+
+      setBrokerSession(null);
+      alphaApi.logout();
     };
 
     const {

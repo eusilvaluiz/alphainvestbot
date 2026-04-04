@@ -423,87 +423,19 @@ export const useTradingBot = () => {
       brokerSession,
       getNextDirection,
       getNextCandleOpenTimestamp,
-      getRandomFirstEntryTimestamp,
+      getFirstEntryTimestamp,
       waitForExpiration,
       waitUntilTimestamp,
       stopBot,
       persistNow,
     ]
   );
-
-  // Resume bot after refresh when symbols are loaded
-  const resumeBot = useCallback(
-    (symbols: ApiSymbol[]) => {
-      if (resumedRef.current) return;
-      const saved = persisted.current;
-      if (!saved?.running || !saved.config || !saved.symbolCode || !brokerSession) return;
-      resumedRef.current = true;
-
-      const sym = symbols.find((s) => s.code === saved.symbolCode);
-      if (!sym) return;
-
-      botRef.current.symbol = sym;
-      botRef.current.config = saved.config;
-      botRef.current.running = true;
-
-      setIsRunning(true);
-      setBalance(brokerSession.creditCents / 100);
-
-      // Check if there's an open trade that hasn't expired yet
-      const openTrade = saved.trades.find((t) => t.status === "open");
-      if (openTrade) {
-        const now = Math.floor(Date.now() / 1000);
-        if (now < openTrade.expirationTimestamp) {
-          // Still active — wait for expiration then continue
-          setStatus("Ativo");
-          // We can't fully resume mid-trade settlement easily,
-          // so we wait for next candle after expiration
-          const nextEntry = getNextCandleOpenTimestamp(openTrade.expirationTimestamp);
-          void executeTradeCycle(saved.config, sym, nextEntry);
-          return;
-        }
-      }
-
-      // No open trade or already expired — schedule next candle
-      const nextEntry = getNextCandleOpenTimestamp(Math.floor(Date.now() / 1000));
-      void executeTradeCycle(saved.config, sym, nextEntry);
-    },
-    [brokerSession, executeTradeCycle, getNextCandleOpenTimestamp]
-  );
-
-  const startBot = useCallback(
-    (config: BotConfig, symbol: ApiSymbol) => {
-      if (!brokerSession) return;
-
-      botRef.current.running = true;
-      botRef.current.config = config;
-      botRef.current.symbol = symbol;
-      botRef.current.profitLoss = 0;
-      botRef.current.trades = [];
-      botRef.current.wins = 0;
-      botRef.current.losses = 0;
-      botRef.current.operations = 0;
-
-      martingaleLevel.current = 0;
-      lastDirection.current = null;
-      directionCounter.current = Math.floor(Math.random() * 2);
-
-      setIsRunning(true);
-      setStatus("Aguardando candle...");
-      setBalance(brokerSession.creditCents / 100);
-      setProfitLoss(0);
-      setWins(0);
-      setLosses(0);
-      setOperations(0);
-      setTrades([]);
-      setCurrentMartingaleLevel(0);
-      setIsMartingale(false);
-
+...
       const firstEntryTimestamp = getFirstEntryTimestamp();
       persistNow();
       void executeTradeCycle(config, symbol, firstEntryTimestamp);
     },
-    [brokerSession, executeTradeCycle, getRandomFirstEntryTimestamp, persistNow]
+    [brokerSession, executeTradeCycle, getFirstEntryTimestamp, persistNow]
   );
 
   const winRate = operations > 0 ? (wins / operations) * 100 : 0;

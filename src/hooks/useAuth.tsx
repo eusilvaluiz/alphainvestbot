@@ -61,11 +61,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      // Session dropped — try silent re-login if we have broker credentials
-      const storedCreds = localStorage.getItem("broker_credentials");
-      if (storedCreds) {
+      // Session dropped — check if we have broker credentials to preserve
+      const hasLocalCreds = !!localStorage.getItem("broker_credentials");
+      const hasLocalSession = !!localStorage.getItem("alpha_session");
+
+      if (hasLocalCreds) {
+        // Try silent re-login but NEVER clear broker session
         try {
-          const creds = JSON.parse(storedCreds);
+          const creds = JSON.parse(localStorage.getItem("broker_credentials")!);
           reAuthRef.current = true;
           console.log("[Auth] Session expired, attempting silent re-login...");
           const doReAuth = authenticateRef.current;
@@ -74,7 +77,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               .then(() => console.log("[Auth] Silent re-login succeeded"))
               .catch((e) => {
                 console.error("[Auth] Silent re-login failed:", e);
-                // Don't clear broker session — edge functions work without JWT
               })
               .finally(() => { reAuthRef.current = false; });
           } else {
@@ -86,8 +88,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      setBrokerSession(null);
-      alphaApi.logout();
+      // Only clear broker session if there are NO local credentials at all
+      if (!hasLocalSession) {
+        setBrokerSession(null);
+        alphaApi.logout();
+      }
     };
 
     const {

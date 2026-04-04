@@ -246,6 +246,10 @@ class AlphaApi {
   }
 
   async getSymbols(): Promise<Symbol[]> {
+    // Symbols requires authentication on UnicBroker
+    const creds = this.getBrokerCredentials();
+    if (!creds && !this.unicSession) return [];
+
     const data = await this.callUnicTrading("symbols");
     return data.symbols || [];
   }

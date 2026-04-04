@@ -34,9 +34,14 @@ const Index = () => {
     alphaApi.getSymbols().then((syms) => {
       if (syms.length === 0) return;
       setSymbols(syms);
+      const savedCode = localStorage.getItem("selected_symbol_code");
       const savedState = localStorage.getItem("alpha_bot_state");
       let restoredSymbol: ApiSymbol | null = null;
-      if (savedState) {
+
+      // Priority: dedicated key > bot state > defaults
+      if (savedCode) {
+        restoredSymbol = syms.find((s) => s.code === savedCode) || null;
+      } else if (savedState) {
         try {
           const parsed = JSON.parse(savedState);
           if (parsed.symbolCode) {
@@ -97,7 +102,10 @@ const Index = () => {
             <CandlestickChart
               selectedSymbol={selectedSymbol}
               symbols={symbols}
-              onSymbolChange={setSelectedSymbol}
+              onSymbolChange={(s) => {
+                setSelectedSymbol(s);
+                localStorage.setItem("selected_symbol_code", s.code);
+              }}
               onPriceUpdate={handlePriceUpdate}
               activeTrades={bot.trades}
             />

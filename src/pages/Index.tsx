@@ -65,6 +65,12 @@ const Index = () => {
     if (isBrokerConnected && symbols.length === 0) {
       loadSymbols();
     }
+    // Fetch live balance when broker connects
+    if (isBrokerConnected) {
+      alphaApi.getBalance().then((b) => {
+        setLiveBalance(b.credit_cents / 100);
+      }).catch(() => {});
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isBrokerConnected]);
 

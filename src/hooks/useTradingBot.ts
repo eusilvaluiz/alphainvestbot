@@ -142,22 +142,18 @@ export const useTradingBot = () => {
     setCurrentMartingaleLevel(0);
     setIsMartingale(false);
     lastDirection.current = null;
-    // Keep trades in state but mark bot as stopped in storage
-    setTrades((t) => {
-      saveState({
-        running: false,
-        config: null,
-        symbolCode: botRef.current.symbol?.code || null,
-        trades: t,
-        profitLoss: botRef.current.profitLoss,
-        wins: 0,
-        losses: 0,
-        operations: 0,
-        martingaleLevel: 0,
-        lastDirection: null,
-        directionCounter: directionCounter.current,
-      });
-      return t;
+    saveState({
+      running: false,
+      config: null,
+      symbolCode: botRef.current.symbol?.code || null,
+      trades: botRef.current.trades,
+      profitLoss: botRef.current.profitLoss,
+      wins: botRef.current.wins,
+      losses: botRef.current.losses,
+      operations: botRef.current.operations,
+      martingaleLevel: 0,
+      lastDirection: null,
+      directionCounter: directionCounter.current,
     });
   }, []);
 

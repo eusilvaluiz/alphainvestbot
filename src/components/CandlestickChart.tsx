@@ -613,6 +613,35 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
     };
 
+    const resolveActiveCandle = ({
+      currentActive,
+      activeFromSnapshot,
+      hasFreshRealtime,
+    }: {
+      currentActive: ChartCandle | null;
+      activeFromSnapshot: ChartCandle | null;
+      hasFreshRealtime: boolean;
+    }) => {
+      if (currentActive && activeFromSnapshot) {
+        const currentBucket = getMinuteBucket(Number(currentActive.time));
+        const snapshotBucket = getMinuteBucket(Number(activeFromSnapshot.time));
+
+        if (currentBucket === snapshotBucket) {
+          return {
+            time: activeFromSnapshot.time,
+            open: activeFromSnapshot.open,
+            high: Math.max(currentActive.high, activeFromSnapshot.high),
+            low: Math.min(currentActive.low, activeFromSnapshot.low),
+            close: activeFromSnapshot.close,
+          } satisfies ChartCandle;
+        }
+      }
+
+      if (activeFromSnapshot) return activeFromSnapshot;
+      if (hasFreshRealtime && currentActive) return currentActive;
+      return null;
+    };
+
     const queueNextSync = () => {
       if (isDisposed) return;
       pendingSyncRef.current = true;
@@ -666,11 +695,15 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
           nextCandles = nextCandles.filter(c => getMinuteBucket(Number(c.time)) !== nowBucket);
 
-          if (hasFreshRealtime && currentActive) {
-            nextCandles.push(currentActive);
-          } else if (activeFromSnapshot) {
-            nextCandles.push(activeFromSnapshot);
-            activeTickBucket = nowBucket;
+          const resolvedActive = resolveActiveCandle({
+            currentActive,
+            activeFromSnapshot,
+            hasFreshRealtime,
+          });
+
+          if (resolvedActive) {
+            nextCandles.push(resolvedActive);
+            activeTickBucket = getMinuteBucket(Number(resolvedActive.time));
           }
 
           nextCandles = nextCandles.slice(-INITIAL_HISTORY_COUNTBACK);
@@ -786,24 +819,8 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         filter: ` (headers.esiq == \`0\` && headers.isiq == \`0\`) || (!contains(headers.esi, '"${BRAND_URL}"') && headers.esiq > \`0\`) || (contains(headers.isi, '"${BRAND_URL}"')) `,
       });
 
-      let debugTickLogsLeft = 8;
-
       derivedChannel.subscribe((message: Ably.Message) => {
-        if (debugTickLogsLeft > 0) {
-          console.log("[Chart Tick Raw]", {
-            name: message.name,
-            data: message.data,
-            extras: message.extras,
-            timestamp: message.timestamp,
-          });
-        }
-
         const tick = parseRealtimeTick(message.data);
-
-        if (debugTickLogsLeft > 0) {
-          console.log("[Chart Tick Parsed]", tick);
-          debugTickLogsLeft -= 1;
-        }
 
         if (!tick || isDisposed) return;
 

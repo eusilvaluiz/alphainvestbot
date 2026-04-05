@@ -574,14 +574,16 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
     const applyRealtimeTickToCurrentCandle = (tick: RealtimeTick) => {
       const bucket = getMinuteBucket(tick.timestamp);
+      const nowBucket = getMinuteBucket(Math.floor(Date.now() / 1000));
+      const effectiveBucket = Math.max(bucket, nowBucket);
       const current = lastCandleRef.current;
 
       if (!current) {
         const seedOpen = tick.open ?? tick.close;
-        activeTickBucket = bucket;
+        activeTickBucket = effectiveBucket;
         lastRealtimeTickAt = Date.now();
         applyLiveCandleUpdate({
-          time: bucket as any,
+          time: effectiveBucket as any,
           open: seedOpen,
           high: tick.high ?? Math.max(seedOpen, tick.close),
           low: tick.low ?? Math.min(seedOpen, tick.close),
@@ -591,10 +593,11 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       }
 
       const currentTime = Number(current.time);
-      if (bucket < currentTime) return;
+      const currentBucketOfActive = getMinuteBucket(currentTime);
+      if (effectiveBucket < currentBucketOfActive) return;
 
-      const isNewMinute = bucket > currentTime;
-      activeTickBucket = bucket;
+      const isNewMinute = effectiveBucket > currentBucketOfActive;
+      activeTickBucket = effectiveBucket;
       lastRealtimeTickAt = Date.now();
 
       const nextOpen = isNewMinute ? (tick.open ?? current.close) : current.open;
@@ -602,7 +605,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       const nextLowBase = isNewMinute ? nextOpen : current.low;
 
       applyLiveCandleUpdate({
-        time: bucket as any,
+        time: (isNewMinute ? effectiveBucket : currentTime) as any,
         open: nextOpen,
         high: tick.high ?? Math.max(nextHighBase, tick.close, tick.open ?? nextOpen),
         low: tick.low ?? Math.min(nextLowBase, tick.close, tick.open ?? nextOpen),
@@ -644,25 +647,33 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
         if (fitContent || candleDataRef.current.length === 0) {
           applyChartData(sortedIncoming.slice(-INITIAL_HISTORY_COUNTBACK), fitContent);
-          activeTickBucket = latestSnapshotTime;
+          activeTickBucket = getMinuteBucket(latestSnapshotTime);
         } else {
-          const closedCandles = sortedIncoming.slice(0, -1);
+          const nowBucket = getMinuteBucket(Math.floor(Date.now() / 1000));
+          const closedFromSnapshot = sortedIncoming.filter(c => getMinuteBucket(Number(c.time)) < nowBucket);
+          const activeFromSnapshot = sortedIncoming.find(c => getMinuteBucket(Number(c.time)) === nowBucket) ?? null;
+
           const currentActive = candleDataRef.current[candleDataRef.current.length - 1] ?? null;
-          const currentActiveTime = currentActive ? Number(currentActive.time) : null;
+          const currentActiveBucket = currentActive ? getMinuteBucket(Number(currentActive.time)) : null;
           const hasFreshRealtime =
-            currentActiveTime === latestSnapshotTime &&
-            activeTickBucket === latestSnapshotTime &&
-            Date.now() - lastRealtimeTickAt < 2000;
+            currentActiveBucket === nowBucket &&
+            activeTickBucket === nowBucket &&
+            Date.now() - lastRealtimeTickAt < 3000;
 
-          let nextCandles = mergeCandles(candleDataRef.current, closedCandles);
-          nextCandles = hasFreshRealtime && currentActive
-            ? mergeCandles(nextCandles, [currentActive])
-            : mergeCandles(nextCandles, [latestSnapshot]);
+          let nextCandles = closedFromSnapshot.length > 0
+            ? mergeCandles(candleDataRef.current, closedFromSnapshot)
+            : [...candleDataRef.current];
 
-          if (!hasFreshRealtime) {
-            activeTickBucket = latestSnapshotTime;
+          nextCandles = nextCandles.filter(c => getMinuteBucket(Number(c.time)) !== nowBucket);
+
+          if (hasFreshRealtime && currentActive) {
+            nextCandles.push(currentActive);
+          } else if (activeFromSnapshot) {
+            nextCandles.push(activeFromSnapshot);
+            activeTickBucket = nowBucket;
           }
 
+          nextCandles = nextCandles.slice(-INITIAL_HISTORY_COUNTBACK);
           applyChartData(nextCandles, false);
         }
 

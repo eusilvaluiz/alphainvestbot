@@ -43,14 +43,7 @@ const Header = ({ onLoginClick, onHistoryClick }: HeaderProps) => {
               <Menu size={16} className="text-muted-foreground" />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-lg shadow-xl z-50 overflow-hidden">
-                <button
-                  onClick={() => { setMenuOpen(false); }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-secondary transition-colors"
-                >
-                  <User size={14} className="text-muted-foreground" />
-                  Perfil
-                </button>
+              <div className="absolute right-0 top-full mt-2 w-40 bg-card border border-border rounded-lg shadow-xl z-50 overflow-hidden">
                 {!isBrokerConnected && (
                   <button
                     onClick={() => { setMenuOpen(false); onLoginClick(); }}
@@ -60,14 +53,6 @@ const Header = ({ onLoginClick, onHistoryClick }: HeaderProps) => {
                     Reconectar sessão
                   </button>
                 )}
-                <button
-                  onClick={() => { setMenuOpen(false); }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-secondary transition-colors"
-                >
-                  <Settings size={14} className="text-muted-foreground" />
-                  Configurações
-                </button>
-                <div className="border-t border-border" />
                 <button
                   onClick={() => { signOut(); setMenuOpen(false); }}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-secondary transition-colors"

@@ -334,6 +334,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const entryLinesRef = useRef<Map<number, any>>(new Map());
   const lastCandleRef = useRef<ChartCandle | null>(null);
+  const lastRealtimeCandleAtRef = useRef<number>(0);
   const ablyClientRef = useRef<Ably.Realtime | null>(null);
   const syncInFlightRef = useRef(false);
   

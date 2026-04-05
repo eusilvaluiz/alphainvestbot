@@ -118,8 +118,8 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest |
 const BRAND_URL = "unicbroker.com";
 const INITIAL_HISTORY_COUNTBACK = 300;
 const LIVE_HISTORY_COUNTBACK = 5;
-const LIVE_MIRROR_INTERVAL_MS = 250;
-const LIVE_SYNC_DEBOUNCE_MS = 150;
+const LIVE_MIRROR_INTERVAL_MS = 500;
+const LIVE_SYNC_DEBOUNCE_MS = 120;
 
 
 const parseNumber = (value: unknown) => {
@@ -186,6 +186,8 @@ const parseRealtimeTick = (input: unknown): { timestamp: number; open: number | 
 
   return null;
 };
+
+const getMinuteBucket = (timestamp: number) => Math.floor(timestamp / 60) * 60;
 
 /* ── Category mapping ── */
 const CATEGORY_TABS = [
@@ -523,6 +525,49 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
     };
 
+    const applyRealtimeTickToCurrentCandle = (tick: { timestamp: number; open: number | null; high: number | null; low: number | null; close: number }) => {
+      if (isDisposed || candleDataRef.current.length === 0) return;
+
+      const currentLast = lastCandleRef.current;
+      if (!currentLast) return;
+
+      const currentBucket = getMinuteBucket(Number(currentLast.time));
+      const tickBucket = getMinuteBucket(tick.timestamp);
+
+      if (tickBucket < currentBucket) return;
+
+      const nextCandle: ChartCandle = tickBucket > currentBucket
+        ? {
+            time: tickBucket as any,
+            open: tick.open ?? currentLast.close,
+            high: tick.high ?? Math.max(tick.close, tick.open ?? currentLast.close),
+            low: tick.low ?? Math.min(tick.close, tick.open ?? currentLast.close),
+            close: tick.close,
+          }
+        : {
+            time: currentLast.time,
+            open: tick.open ?? currentLast.open,
+            high: tick.high ?? Math.max(currentLast.high, tick.close, tick.open ?? currentLast.open),
+            low: tick.low ?? Math.min(currentLast.low, tick.close, tick.open ?? currentLast.open),
+            close: tick.close,
+          };
+
+      const nextCandles = tickBucket > currentBucket
+        ? [...candleDataRef.current, nextCandle].slice(-INITIAL_HISTORY_COUNTBACK)
+        : candleDataRef.current.map((candle, index, arr) => index === arr.length - 1 ? nextCandle : candle);
+
+      candleDataRef.current = nextCandles;
+      lastCandleRef.current = nextCandle;
+      series.update(nextCandle as any);
+      setCurrentPrice(nextCandle.close);
+      onPriceUpdate?.(nextCandle.close);
+      setStats({
+        open: nextCandle.open,
+        high: nextCandle.high,
+        low: nextCandle.low,
+      });
+    };
+
     const queueNextSync = () => {
       if (isDisposed) return;
       pendingSyncRef.current = true;
@@ -673,6 +718,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         const tick = parseRealtimeTick(message.data);
         if (!tick || isDisposed) return;
 
+        applyRealtimeTickToCurrentCandle(tick);
         void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK, force: true });
       });
 

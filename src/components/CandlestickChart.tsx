@@ -84,7 +84,7 @@ async function fetchUnicCandles(symbol: string, countback = 300) {
   }
 }
 
-async function fetchAblyToken(): Promise<Ably.TokenDetails | null> {
+async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest | null> {
   try {
     const stored = localStorage.getItem("broker_credentials");
     if (!stored) return null;
@@ -95,15 +95,28 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | null> {
       body: { broker_user: user, broker_pass: pass },
     });
 
-    if (error || !data?.token) return null;
-    return data as Ably.TokenDetails;
-  } catch {
+    if (error || !data) {
+      console.error("[Ably] fetchAblyToken error:", error, data);
+      return null;
+    }
+
+    console.log("[Ably] Token response keys:", Object.keys(data));
+
+    // Accept both TokenDetails (has .token) and TokenRequest (has .keyName + .mac)
+    if (data.token || (data.keyName && data.mac) || data.issued) {
+      return data;
+    }
+
+    console.error("[Ably] Unrecognized token format:", data);
+    return null;
+  } catch (e) {
+    console.error("[Ably] fetchAblyToken exception:", e);
     return null;
   }
 }
 
 const BRAND_URL = "unicbroker.com";
-const HISTORICAL_SYNC_INTERVAL_MS = 5000;
+const HISTORICAL_SYNC_INTERVAL_MS = 10000;
 
 
 const parseNumber = (value: unknown) => {
@@ -498,19 +511,20 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       }
 
       setRealtimeStatus("connecting");
-      const tokenDetails = await fetchAblyToken();
-      if (!tokenDetails || isDisposed) {
+      const initialToken = await fetchAblyToken();
+      if (!initialToken || isDisposed) {
         setRealtimeStatus("disconnected");
         return;
       }
 
-      const client = new Ably.Realtime({
-        tokenDetails,
+      console.log("[Ably] Connecting with token type:", initialToken.hasOwnProperty("token") ? "TokenDetails" : "TokenRequest");
+
+      const clientOptions: Ably.ClientOptions = {
         authCallback: async (_data, callback) => {
           try {
             const newToken = await fetchAblyToken();
             if (newToken) {
-              callback(null, newToken);
+              callback(null, newToken as any);
             } else {
               callback(new Error("Failed to refresh Ably token") as any, null);
             }
@@ -518,7 +532,17 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
             callback(err as any, null);
           }
         },
-      });
+      };
+
+      // Use tokenDetails for TokenDetails, or pass as first auth via authCallback
+      if ("token" in initialToken) {
+        clientOptions.tokenDetails = initialToken as Ably.TokenDetails;
+      } else {
+        // TokenRequest — just use authCallback (it will be called immediately)
+        clientOptions.tokenDetails = initialToken as any;
+      }
+
+      const client = new Ably.Realtime(clientOptions);
 
       client.connection.on("connected", () => {
         setRealtimeStatus("connected");
@@ -537,11 +561,15 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
 
       derivedChannel.subscribe((message: Ably.Message) => {
+        console.log("[Ably tick raw]", typeof message.data, message.data);
         const tick = parseRealtimeTick(message.data);
+        console.log("[Ably tick parsed]", tick);
         if (!tick || isDisposed) return;
 
         const price = tick.closePrice;
         const candleTime = tick.timestamp - (tick.timestamp % 60); // floor to minute
+        const lastTime = lastCandleRef.current?.time as number | undefined;
+        console.log("[Ably] price=", price, "candleTime=", candleTime, "lastCandleTime=", lastTime);
 
         // Update price display immediately
         setCurrentPrice(price);

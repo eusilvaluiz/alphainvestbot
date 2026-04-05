@@ -149,6 +149,20 @@ const parseJsonSafely = (value: unknown) => {
 
 const toUnixSeconds = (value: number) => (value > 1_000_000_000_000 ? Math.floor(value / 1000) : Math.floor(value));
 
+const parseTimestamp = (value: unknown) => {
+  const numeric = parseNumber(value);
+  if (numeric !== null) return toUnixSeconds(numeric);
+
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) {
+      return toUnixSeconds(parsed);
+    }
+  }
+
+  return null;
+};
+
 const sortCandles = (candles: ChartCandle[]) =>
   [...candles].sort((a, b) => Number(a.time) - Number(b.time));
 
@@ -165,26 +179,52 @@ const mergeCandles = (base: ChartCandle[], incoming: ChartCandle[]) => {
 const parseRealtimeTick = (input: unknown): RealtimeTick | null => {
   const parsed = parseJsonSafely(input);
 
+  if (Array.isArray(parsed)) {
+    for (const item of parsed) {
+      const nested = parseRealtimeTick(item);
+      if (nested) return nested;
+    }
+    return null;
+  }
+
   if (!parsed || typeof parsed !== "object") return null;
 
   const record = parsed as Record<string, unknown>;
   const open = parseNumber(record.open ?? record.o);
   const high = parseNumber(record.high ?? record.h);
   const low = parseNumber(record.low ?? record.l);
-  const close = parseNumber(record.close ?? record.c ?? record.price ?? record.last_price ?? record.value);
-  const timestamp = parseNumber(record.time ?? record.t ?? record.timestamp ?? record.ts ?? record.updated_at);
+  const close = parseNumber(
+    record.close ??
+    record.c ??
+    record.price ??
+    record.last_price ??
+    record.value ??
+    record.rate ??
+    record.bid ??
+    record.ask ??
+    record.mid
+  );
+  const timestamp = parseTimestamp(
+    record.time ??
+    record.t ??
+    record.timestamp ??
+    record.ts ??
+    record.updated_at ??
+    record.created_at ??
+    record.date
+  );
 
-  if (close !== null && timestamp !== null) {
+  if (close !== null) {
     return {
       close,
-      timestamp: toUnixSeconds(timestamp),
+      timestamp: timestamp ?? Math.floor(Date.now() / 1000),
       open,
       high,
       low,
     };
   }
 
-  for (const key of ["data", "payload", "tick", "message"]) {
+  for (const key of ["data", "payload", "tick", "message", "body", "item", "current", "candles", "values"]) {
     if (record[key] !== undefined) {
       const nested = parseRealtimeTick(record[key]);
       if (nested) return nested;
@@ -735,8 +775,25 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         filter: ` (headers.esiq == \`0\` && headers.isiq == \`0\`) || (!contains(headers.esi, '"${BRAND_URL}"') && headers.esiq > \`0\`) || (contains(headers.isi, '"${BRAND_URL}"')) `,
       });
 
+      let debugTickLogsLeft = 8;
+
       derivedChannel.subscribe((message: Ably.Message) => {
+        if (debugTickLogsLeft > 0) {
+          console.log("[Chart Tick Raw]", {
+            name: message.name,
+            data: message.data,
+            extras: message.extras,
+            timestamp: message.timestamp,
+          });
+        }
+
         const tick = parseRealtimeTick(message.data);
+
+        if (debugTickLogsLeft > 0) {
+          console.log("[Chart Tick Parsed]", tick);
+          debugTickLogsLeft -= 1;
+        }
+
         if (!tick || isDisposed) return;
 
         applyRealtimeTickToCurrentCandle(tick);

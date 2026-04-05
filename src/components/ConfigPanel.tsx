@@ -164,6 +164,7 @@ const ConfigPanel = ({
                 if (!isRunning) {
                   setSelectedModel(model.id);
                   onModelChange?.(model.id);
+                  setIsSaved(false);
                 }
               }}
               disabled={isRunning}

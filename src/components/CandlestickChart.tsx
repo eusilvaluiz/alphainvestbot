@@ -632,7 +632,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
             lastRealtimeCandleAtRef.current = Date.now();
             lastCandleRef.current = newCandle;
             seriesRef.current.update(newCandle as any);
-            void syncFromUnic();
           }
         }
       });

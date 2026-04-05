@@ -51,6 +51,7 @@ const ConfigPanel = ({
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [martingaleEnabled, setMartingaleEnabled] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
     if (!user?.id || loaded) return;
@@ -130,6 +131,7 @@ const ConfigPanel = ({
       }
 
       toast.success("Configuração salva");
+      setIsSaved(true);
     } catch (error: any) {
       toast.error(error?.message || "Erro ao salvar configuração");
     } finally {
@@ -137,8 +139,13 @@ const ConfigPanel = ({
     }
   };
 
-  const handleStart = () => onStart(buildConfig());
-
+  const handleStart = () => {
+    if (!isSaved) {
+      toast.warning("Salve as configurações acima antes de iniciar o Bot");
+      return;
+    }
+    onStart(buildConfig());
+  };
   const maxEntry = Math.max(balance || 1000, 1000);
   const maxStop = Math.max(balance * 2 || 5000, 5000);
 
@@ -157,6 +164,7 @@ const ConfigPanel = ({
                 if (!isRunning) {
                   setSelectedModel(model.id);
                   onModelChange?.(model.id);
+                  setIsSaved(false);
                 }
               }}
               disabled={isRunning}
@@ -183,7 +191,7 @@ const ConfigPanel = ({
               type="text"
               inputMode="numeric"
               value={entryValue}
-              onChange={(e) => setEntryValue(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
+              onChange={(e) => { setEntryValue(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0); setIsSaved(false); }}
               disabled={isRunning}
               className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs font-bold text-foreground outline-none focus:border-primary/50 transition-colors disabled:opacity-50"
             />
@@ -194,7 +202,7 @@ const ConfigPanel = ({
             <label className="text-[10px] text-muted-foreground uppercase tracking-wider leading-4">Martingale</label>
             <Switch
               checked={martingaleEnabled}
-              onCheckedChange={setMartingaleEnabled}
+              onCheckedChange={(v) => { setMartingaleEnabled(v); setIsSaved(false); }}
               disabled={isRunning}
               className="scale-[0.6] origin-right"
             />
@@ -206,8 +214,9 @@ const ConfigPanel = ({
               value={position}
               onChange={(e) => {
                 const raw = e.target.value.replace(/[^0-9]/g, "");
-                if (raw === "") { setPosition(0 as any); return; }
+                if (raw === "") { setPosition(0 as any); setIsSaved(false); return; }
                 setPosition(Math.min(10, Math.max(1, Number(raw))));
+                setIsSaved(false);
               }}
               onBlur={() => { if (!position || position < 1) setPosition(1); }}
               disabled={isRunning}
@@ -234,7 +243,7 @@ const ConfigPanel = ({
               type="text"
               inputMode="numeric"
               value={stopWin}
-              onChange={(e) => setStopWin(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
+              onChange={(e) => { setStopWin(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0); setIsSaved(false); }}
               disabled={isRunning}
               className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs font-bold text-chart-green outline-none focus:border-chart-green/50 transition-colors disabled:opacity-50"
             />
@@ -248,7 +257,7 @@ const ConfigPanel = ({
               type="text"
               inputMode="numeric"
               value={stopLoss}
-              onChange={(e) => setStopLoss(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
+              onChange={(e) => { setStopLoss(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0); setIsSaved(false); }}
               disabled={isRunning}
               className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs font-bold text-chart-red outline-none focus:border-chart-red/50 transition-colors disabled:opacity-50"
             />
@@ -269,16 +278,24 @@ const ConfigPanel = ({
         <div className="flex gap-2">
           <button
             onClick={handleSave}
-            disabled={!isLoggedIn || saving}
-            className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            disabled={!isLoggedIn || saving || isSaved}
+            className={`flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-xs font-medium transition-colors disabled:opacity-50 ${
+              isSaved
+                ? "bg-secondary text-muted-foreground cursor-default"
+                : "bg-gradient-to-r from-chart-green to-emerald-500 text-white shadow-lg shadow-chart-green/20 hover:shadow-chart-green/40"
+            }`}
           >
             <Save size={14} />
-            {saving ? "..." : "Salvar"}
+            {saving ? "..." : isSaved ? "Salvo" : "Salvar"}
           </button>
           <button
             onClick={handleStart}
             disabled={!isLoggedIn}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-heading font-bold text-sm uppercase tracking-wider bg-gradient-to-r from-chart-green to-emerald-500 text-white shadow-lg shadow-chart-green/20 hover:shadow-chart-green/40 transition-all duration-300 disabled:opacity-50"
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-heading font-bold text-sm uppercase tracking-wider transition-all duration-300 disabled:opacity-50 ${
+              isSaved
+                ? "bg-gradient-to-r from-chart-green to-emerald-500 text-white shadow-lg shadow-chart-green/20 hover:shadow-chart-green/40"
+                : "bg-secondary text-muted-foreground"
+            }`}
           >
             <Play size={16} />
             {isLoggedIn ? "Iniciar Bot" : "Login Necessário"}

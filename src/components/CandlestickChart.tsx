@@ -511,19 +511,20 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       }
 
       setRealtimeStatus("connecting");
-      const tokenDetails = await fetchAblyToken();
-      if (!tokenDetails || isDisposed) {
+      const initialToken = await fetchAblyToken();
+      if (!initialToken || isDisposed) {
         setRealtimeStatus("disconnected");
         return;
       }
 
-      const client = new Ably.Realtime({
-        tokenDetails,
+      console.log("[Ably] Connecting with token type:", initialToken.hasOwnProperty("token") ? "TokenDetails" : "TokenRequest");
+
+      const clientOptions: Ably.ClientOptions = {
         authCallback: async (_data, callback) => {
           try {
             const newToken = await fetchAblyToken();
             if (newToken) {
-              callback(null, newToken);
+              callback(null, newToken as any);
             } else {
               callback(new Error("Failed to refresh Ably token") as any, null);
             }
@@ -531,7 +532,17 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
             callback(err as any, null);
           }
         },
-      });
+      };
+
+      // Use tokenDetails for TokenDetails, or pass as first auth via authCallback
+      if ("token" in initialToken) {
+        clientOptions.tokenDetails = initialToken as Ably.TokenDetails;
+      } else {
+        // TokenRequest — just use authCallback (it will be called immediately)
+        clientOptions.tokenDetails = initialToken as any;
+      }
+
+      const client = new Ably.Realtime(clientOptions);
 
       client.connection.on("connected", () => {
         setRealtimeStatus("connected");

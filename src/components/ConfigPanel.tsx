@@ -202,7 +202,7 @@ const ConfigPanel = ({
             <label className="text-[10px] text-muted-foreground uppercase tracking-wider leading-4">Martingale</label>
             <Switch
               checked={martingaleEnabled}
-              onCheckedChange={setMartingaleEnabled}
+              onCheckedChange={(v) => { setMartingaleEnabled(v); setIsSaved(false); }}
               disabled={isRunning}
               className="scale-[0.6] origin-right"
             />

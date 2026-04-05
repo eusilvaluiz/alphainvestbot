@@ -86,7 +86,7 @@ async function doLogin(brokerUser: string, brokerPass: string): Promise<string |
 async function fetchUdf(cookies: string, symbol: string, resolution: string, countback: number) {
   const now = Math.floor(Date.now() / 1000);
   const from = now - countback * 60;
-  const udfUrl = `${UNIC_BASE}/publicapi/tradingview/udf-history?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&countback=${countback}&site=unicbroker.com`;
+  const udfUrl = `${UNIC_BASE}/publicapi/tradingview/udf-history?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&countback=${countback}&site=unicbroker.com&_=${Date.now()}`;
 
   return await fetch(udfUrl, {
     headers: {
@@ -94,6 +94,8 @@ async function fetchUdf(cookies: string, symbol: string, resolution: string, cou
       Referer: `${UNIC_BASE}/traderoom`,
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       Accept: "application/json",
+      "Cache-Control": "no-cache, no-store, max-age=0",
+      Pragma: "no-cache",
     },
   });
 }
@@ -129,7 +131,7 @@ serve(async (req) => {
           const data = await udfRes.json();
           if (data.s === "ok") {
             return new Response(JSON.stringify({ ...data, session_cookies }), {
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
             });
           }
         } else {
@@ -164,7 +166,7 @@ serve(async (req) => {
     const data = await udfRes.json();
     // Return fresh session_cookies so client caches them for next calls
     return new Response(JSON.stringify({ ...data, session_cookies: cookies }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
   } catch (error) {
     console.error("UDF proxy error:", error);

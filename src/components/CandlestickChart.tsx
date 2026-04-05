@@ -118,8 +118,7 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest |
 const BRAND_URL = "unicbroker.com";
 const INITIAL_HISTORY_COUNTBACK = 300;
 const LIVE_HISTORY_COUNTBACK = 5;
-const LIVE_MIRROR_INTERVAL_MS = 500;
-const LIVE_SYNC_DEBOUNCE_MS = 120;
+const LIVE_MIRROR_INTERVAL_MS = 100;
 
 
 const parseNumber = (value: unknown) => {
@@ -186,8 +185,6 @@ const parseRealtimeTick = (input: unknown): { timestamp: number; open: number | 
 
   return null;
 };
-
-const getMinuteBucket = (timestamp: number) => Math.floor(timestamp / 60) * 60;
 
 /* ── Category mapping ── */
 const CATEGORY_TABS = [
@@ -352,8 +349,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
   const entryLinesRef = useRef<Map<number, any>>(new Map());
   const candleDataRef = useRef<ChartCandle[]>([]);
   const lastCandleRef = useRef<ChartCandle | null>(null);
-  const lastMirrorSyncStartedAtRef = useRef<number>(0);
-  const lastAppliedLiveSyncAtRef = useRef<number>(0);
   const pendingSyncRef = useRef(false);
   const ablyClientRef = useRef<Ably.Realtime | null>(null);
   const syncInFlightRef = useRef(false);
@@ -422,12 +417,10 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     }
 
     let isDisposed = false;
-    let syncInterval: number | null = null;
+    let syncLoopTimeout: number | null = null;
 
     lastCandleRef.current = null;
     candleDataRef.current = [];
-    lastMirrorSyncStartedAtRef.current = 0;
-    lastAppliedLiveSyncAtRef.current = 0;
     pendingSyncRef.current = false;
     entryLinesRef.current.clear();
     syncInFlightRef.current = false;
@@ -492,82 +485,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
     };
 
-    const applyLiveUpdate = (candles: ChartCandle[]) => {
-      if (candles.length === 0 || isDisposed) return;
-
-      const sortedIncoming = sortCandles(candles);
-      const incomingLast = sortedIncoming[sortedIncoming.length - 1];
-      const currentLast = lastCandleRef.current;
-
-      if (!currentLast || candleDataRef.current.length === 0) {
-        applyChartData(sortedIncoming.slice(-INITIAL_HISTORY_COUNTBACK));
-        return;
-      }
-
-      const hasBoundaryShift = Number(incomingLast.time) !== Number(currentLast.time);
-      if (hasBoundaryShift) {
-        applyChartData(mergeCandles(candleDataRef.current, sortedIncoming));
-        return;
-      }
-
-      const base = [...candleDataRef.current];
-      const lastIndex = base.length - 1;
-      base[lastIndex] = incomingLast;
-      candleDataRef.current = base;
-      lastCandleRef.current = incomingLast;
-      series.update(incomingLast as any);
-      setCurrentPrice(incomingLast.close);
-      onPriceUpdate?.(incomingLast.close);
-      setStats({
-        open: incomingLast.open,
-        high: incomingLast.high,
-        low: incomingLast.low,
-      });
-    };
-
-    const applyRealtimeTickToCurrentCandle = (tick: { timestamp: number; open: number | null; high: number | null; low: number | null; close: number }) => {
-      if (isDisposed || candleDataRef.current.length === 0) return;
-
-      const currentLast = lastCandleRef.current;
-      if (!currentLast) return;
-
-      const currentBucket = getMinuteBucket(Number(currentLast.time));
-      const tickBucket = getMinuteBucket(tick.timestamp);
-
-      if (tickBucket < currentBucket) return;
-
-      const nextCandle: ChartCandle = tickBucket > currentBucket
-        ? {
-            time: tickBucket as any,
-            open: tick.open ?? currentLast.close,
-            high: tick.high ?? Math.max(tick.close, tick.open ?? currentLast.close),
-            low: tick.low ?? Math.min(tick.close, tick.open ?? currentLast.close),
-            close: tick.close,
-          }
-        : {
-            time: currentLast.time,
-            open: tick.open ?? currentLast.open,
-            high: tick.high ?? Math.max(currentLast.high, tick.close, tick.open ?? currentLast.open),
-            low: tick.low ?? Math.min(currentLast.low, tick.close, tick.open ?? currentLast.open),
-            close: tick.close,
-          };
-
-      const nextCandles = tickBucket > currentBucket
-        ? [...candleDataRef.current, nextCandle].slice(-INITIAL_HISTORY_COUNTBACK)
-        : candleDataRef.current.map((candle, index, arr) => index === arr.length - 1 ? nextCandle : candle);
-
-      candleDataRef.current = nextCandles;
-      lastCandleRef.current = nextCandle;
-      series.update(nextCandle as any);
-      setCurrentPrice(nextCandle.close);
-      onPriceUpdate?.(nextCandle.close);
-      setStats({
-        open: nextCandle.open,
-        high: nextCandle.high,
-        low: nextCandle.low,
-      });
-    };
-
     const queueNextSync = () => {
       if (isDisposed) return;
       pendingSyncRef.current = true;
@@ -584,39 +501,31 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     } = {}) => {
       if (!isBrokerConnected) return false;
 
-      const now = Date.now();
-      const minDelay = fitContent || force ? 0 : LIVE_SYNC_DEBOUNCE_MS;
-
       if (syncInFlightRef.current) {
-        queueNextSync();
-        return false;
-      }
-
-      if (!fitContent && !force && now - lastAppliedLiveSyncAtRef.current < minDelay) {
+        if (force) queueNextSync();
         return false;
       }
 
       syncInFlightRef.current = true;
-      lastMirrorSyncStartedAtRef.current = now;
 
       try {
         const unicData = await fetchUnicCandles(selectedSymbol.code, countback);
         if (!unicData || unicData.length === 0 || isDisposed) return false;
 
         setDataSource("unic");
-        if (fitContent || candleDataRef.current.length === 0) {
-          applyChartData(sortCandles(unicData).slice(-INITIAL_HISTORY_COUNTBACK), fitContent);
-        } else {
-          applyLiveUpdate(unicData);
-        }
-        lastAppliedLiveSyncAtRef.current = Date.now();
+        const sortedIncoming = sortCandles(unicData);
+        const nextCandles = fitContent || candleDataRef.current.length === 0
+          ? sortedIncoming.slice(-INITIAL_HISTORY_COUNTBACK)
+          : mergeCandles(candleDataRef.current, sortedIncoming);
+
+        applyChartData(nextCandles, fitContent);
         return true;
       } finally {
         syncInFlightRef.current = false;
 
         if (pendingSyncRef.current && !isDisposed) {
           pendingSyncRef.current = false;
-          window.setTimeout(() => {
+          syncLoopTimeout = window.setTimeout(() => {
             void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK, force: true });
           }, 0);
         }
@@ -652,9 +561,14 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     const startMirrorSync = () => {
       if (!isBrokerConnected) return;
 
-      syncInterval = window.setInterval(() => {
-        void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK, force: true });
-      }, LIVE_MIRROR_INTERVAL_MS);
+      const runLoop = async () => {
+        if (isDisposed) return;
+        await syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK, force: true });
+        if (isDisposed) return;
+        syncLoopTimeout = window.setTimeout(runLoop, LIVE_MIRROR_INTERVAL_MS);
+      };
+
+      syncLoopTimeout = window.setTimeout(runLoop, 0);
     };
 
     // Connect to Ably for realtime ticks
@@ -718,7 +632,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         const tick = parseRealtimeTick(message.data);
         if (!tick || isDisposed) return;
 
-        applyRealtimeTickToCurrentCandle(tick);
         void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK, force: true });
       });
 
@@ -739,8 +652,8 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     return () => {
       isDisposed = true;
       window.removeEventListener("resize", handleResize);
-      if (syncInterval !== null) {
-        window.clearInterval(syncInterval);
+      if (syncLoopTimeout !== null) {
+        window.clearTimeout(syncLoopTimeout);
       }
       chart.remove();
       chartRef.current = null;

@@ -139,17 +139,26 @@ const parseJsonSafely = (value: unknown) => {
 
 const toUnixSeconds = (value: number) => (value > 1_000_000_000_000 ? Math.floor(value / 1000) : Math.floor(value));
 
-const parseRealtimeTick = (input: unknown): { closePrice: number; timestamp: number } | null => {
+const parseRealtimeTick = (input: unknown): { timestamp: number; open: number | null; high: number | null; low: number | null; close: number } | null => {
   const parsed = parseJsonSafely(input);
 
   if (!parsed || typeof parsed !== "object") return null;
 
   const record = parsed as Record<string, unknown>;
-  const closePrice = parseNumber(record.close ?? record.c ?? record.price ?? record.last_price ?? record.value);
+  const open = parseNumber(record.open ?? record.o);
+  const high = parseNumber(record.high ?? record.h);
+  const low = parseNumber(record.low ?? record.l);
+  const close = parseNumber(record.close ?? record.c ?? record.price ?? record.last_price ?? record.value);
   const timestamp = parseNumber(record.time ?? record.t ?? record.timestamp ?? record.ts ?? record.updated_at);
 
-  if (closePrice !== null && timestamp !== null) {
-    return { closePrice, timestamp: toUnixSeconds(timestamp) };
+  if (close !== null && timestamp !== null) {
+    return {
+      close,
+      timestamp: toUnixSeconds(timestamp),
+      open,
+      high,
+      low,
+    };
   }
 
   for (const key of ["data", "payload", "tick", "message"]) {

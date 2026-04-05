@@ -116,8 +116,9 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest |
 }
 
 const BRAND_URL = "unicbroker.com";
-const HISTORICAL_SYNC_INTERVAL_MS = 30000;
-const LIVE_CANDLE_TTL_MS = 90_000;
+const INITIAL_HISTORY_COUNTBACK = 300;
+const LIVE_HISTORY_COUNTBACK = 5;
+const LIVE_MIRROR_INTERVAL_MS = 1000;
 
 
 const parseNumber = (value: unknown) => {
@@ -139,6 +140,19 @@ const parseJsonSafely = (value: unknown) => {
 };
 
 const toUnixSeconds = (value: number) => (value > 1_000_000_000_000 ? Math.floor(value / 1000) : Math.floor(value));
+
+const sortCandles = (candles: ChartCandle[]) =>
+  [...candles].sort((a, b) => Number(a.time) - Number(b.time));
+
+const mergeCandles = (base: ChartCandle[], incoming: ChartCandle[]) => {
+  const mergedByTime = new Map<number, ChartCandle>();
+
+  for (const candle of [...base, ...incoming]) {
+    mergedByTime.set(Number(candle.time), candle);
+  }
+
+  return sortCandles(Array.from(mergedByTime.values())).slice(-INITIAL_HISTORY_COUNTBACK);
+};
 
 const parseRealtimeTick = (input: unknown): { timestamp: number; open: number | null; high: number | null; low: number | null; close: number } | null => {
   const parsed = parseJsonSafely(input);
@@ -333,8 +347,9 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const entryLinesRef = useRef<Map<number, any>>(new Map());
+  const candleDataRef = useRef<ChartCandle[]>([]);
   const lastCandleRef = useRef<ChartCandle | null>(null);
-  const lastRealtimeCandleAtRef = useRef<number>(0);
+  const lastMirrorSyncStartedAtRef = useRef<number>(0);
   const ablyClientRef = useRef<Ably.Realtime | null>(null);
   const syncInFlightRef = useRef(false);
   
@@ -405,7 +420,8 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     let syncInterval: number | null = null;
 
     lastCandleRef.current = null;
-    lastRealtimeCandleAtRef.current = 0;
+    candleDataRef.current = [];
+    lastMirrorSyncStartedAtRef.current = 0;
     entryLinesRef.current.clear();
     syncInFlightRef.current = false;
     
@@ -449,64 +465,66 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     chartRef.current = chart;
     seriesRef.current = series;
 
-    const applyHistoricalData = (candles: ChartCandle[], fitContent = false, preserveLiveCandle = false) => {
+    const applyChartData = (candles: ChartCandle[], fitContent = false) => {
       if (isDisposed || candles.length === 0) return;
 
-      const liveCandleIsFresh = Date.now() - lastRealtimeCandleAtRef.current < LIVE_CANDLE_TTL_MS;
-      const mergedCandles = [...candles];
-
-      if (preserveLiveCandle && liveCandleIsFresh && lastCandleRef.current) {
-        const liveCandle = lastCandleRef.current;
-        const lastHistorical = mergedCandles[mergedCandles.length - 1];
-
-        if (!lastHistorical) {
-          mergedCandles.push(liveCandle);
-        } else if (Number(lastHistorical.time) === Number(liveCandle.time)) {
-          mergedCandles[mergedCandles.length - 1] = {
-            time: liveCandle.time,
-            open: liveCandle.open,
-            high: Math.max(lastHistorical.high, liveCandle.high),
-            low: Math.min(lastHistorical.low, liveCandle.low),
-            close: liveCandle.close,
-          };
-        } else if (Number(lastHistorical.time) < Number(liveCandle.time)) {
-          mergedCandles.push(liveCandle);
-        }
-      }
-
-      series.setData(mergedCandles as any);
+      candleDataRef.current = candles;
+      series.setData(candles as any);
       if (fitContent) {
         chart.timeScale().fitContent();
       }
 
-      const last = mergedCandles[mergedCandles.length - 1];
+      const last = candles[candles.length - 1];
       lastCandleRef.current = last;
       setCurrentPrice(last.close);
       onPriceUpdate?.(last.close);
       setStats({
-        open: mergedCandles[0].open,
-        high: Math.max(...mergedCandles.map((d) => d.high)),
-        low: Math.min(...mergedCandles.map((d) => d.low)),
+        open: candles[0].open,
+        high: Math.max(...candles.map((d) => d.high)),
+        low: Math.min(...candles.map((d) => d.low)),
       });
     };
 
-    const syncFromUnic = async (fitContent = false) => {
+    const mergeLiveSnapshot = (candles: ChartCandle[]) => {
+      if (candles.length === 0) return;
+
+      const nextCandles = candleDataRef.current.length === 0
+        ? sortCandles(candles).slice(-INITIAL_HISTORY_COUNTBACK)
+        : mergeCandles(candleDataRef.current, candles);
+
+      applyChartData(nextCandles);
+    };
+
+    const syncFromUnic = async ({
+      fitContent = false,
+      countback = LIVE_HISTORY_COUNTBACK,
+      force = false,
+    }: {
+      fitContent?: boolean;
+      countback?: number;
+      force?: boolean;
+    } = {}) => {
       if (!isBrokerConnected) return false;
       if (syncInFlightRef.current) return false;
 
-      const liveCandleIsFresh = Date.now() - lastRealtimeCandleAtRef.current < LIVE_CANDLE_TTL_MS;
-      if (!fitContent && liveCandleIsFresh) {
+      const now = Date.now();
+      if (!fitContent && !force && now - lastMirrorSyncStartedAtRef.current < LIVE_MIRROR_INTERVAL_MS - 100) {
         return false;
       }
 
       syncInFlightRef.current = true;
+      lastMirrorSyncStartedAtRef.current = now;
 
       try {
-        const unicData = await fetchUnicCandles(selectedSymbol.code, 300);
+        const unicData = await fetchUnicCandles(selectedSymbol.code, countback);
         if (!unicData || unicData.length === 0 || isDisposed) return false;
 
         setDataSource("unic");
-        applyHistoricalData(unicData, fitContent, !fitContent);
+        if (fitContent || candleDataRef.current.length === 0) {
+          applyChartData(sortCandles(unicData).slice(-INITIAL_HISTORY_COUNTBACK), fitContent);
+        } else {
+          mergeLiveSnapshot(unicData);
+        }
         return true;
       } finally {
         syncInFlightRef.current = false;
@@ -515,7 +533,11 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
     // Load initial historical data
     const loadInitialData = async () => {
-      const loadedFromUnic = await syncFromUnic(true);
+      const loadedFromUnic = await syncFromUnic({
+        fitContent: true,
+        countback: INITIAL_HISTORY_COUNTBACK,
+        force: true,
+      });
       if (loadedFromUnic) return;
 
       setDataSource("alpha");
@@ -531,16 +553,16 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       }));
 
       if (chartData.length > 0) {
-        applyHistoricalData(chartData, true);
+        applyChartData(chartData, true);
       }
     };
 
-    const startHistoricalSync = () => {
+    const startMirrorSync = () => {
       if (!isBrokerConnected) return;
 
       syncInterval = window.setInterval(() => {
-        void syncFromUnic();
-      }, HISTORICAL_SYNC_INTERVAL_MS);
+        void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK });
+      }, LIVE_MIRROR_INTERVAL_MS);
     };
 
     // Connect to Ably for realtime ticks
@@ -604,43 +626,14 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         const tick = parseRealtimeTick(message.data);
         if (!tick || isDisposed) return;
 
-        const candleTime = tick.timestamp - (tick.timestamp % 60);
-        setCurrentPrice(tick.close);
-        onPriceUpdate?.(tick.close);
-
-        const last = lastCandleRef.current;
-        if (last && seriesRef.current) {
-          if (candleTime === (last.time as number)) {
-            const updated: ChartCandle = {
-              time: last.time,
-              open: tick.open ?? last.open,
-              high: tick.high ?? Math.max(last.high, tick.close),
-              low: tick.low ?? Math.min(last.low, tick.close),
-              close: tick.close,
-            };
-            lastRealtimeCandleAtRef.current = Date.now();
-            lastCandleRef.current = updated;
-            seriesRef.current.update(updated as any);
-          } else if (candleTime > (last.time as number)) {
-            const newCandle: ChartCandle = {
-              time: candleTime as any,
-              open: tick.open ?? tick.close,
-              high: tick.high ?? tick.close,
-              low: tick.low ?? tick.close,
-              close: tick.close,
-            };
-            lastRealtimeCandleAtRef.current = Date.now();
-            lastCandleRef.current = newCandle;
-            seriesRef.current.update(newCandle as any);
-          }
-        }
+        void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK });
       });
 
       ablyClientRef.current = client;
     };
 
     void loadInitialData();
-    startHistoricalSync();
+    startMirrorSync();
     void connectAbly();
 
     const handleResize = () => {

@@ -591,15 +591,10 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
 
       derivedChannel.subscribe((message: Ably.Message) => {
-        console.log("[Ably tick raw]", typeof message.data, message.data);
         const tick = parseRealtimeTick(message.data);
-        console.log("[Ably tick parsed]", tick);
         if (!tick || isDisposed) return;
 
         const candleTime = tick.timestamp - (tick.timestamp % 60);
-        const lastTime = lastCandleRef.current?.time as number | undefined;
-        console.log("[Ably] close=", tick.close, "candleTime=", candleTime, "lastCandleTime=", lastTime);
-
         setCurrentPrice(tick.close);
         onPriceUpdate?.(tick.close);
 
@@ -613,6 +608,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
               low: tick.low ?? Math.min(last.low, tick.close),
               close: tick.close,
             };
+            lastRealtimeCandleAtRef.current = Date.now();
             lastCandleRef.current = updated;
             seriesRef.current.update(updated as any);
           } else if (candleTime > (last.time as number)) {
@@ -623,6 +619,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
               low: tick.low ?? tick.close,
               close: tick.close,
             };
+            lastRealtimeCandleAtRef.current = Date.now();
             lastCandleRef.current = newCandle;
             seriesRef.current.update(newCandle as any);
             void syncFromUnic();

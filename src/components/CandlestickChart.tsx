@@ -493,6 +493,12 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     const syncFromUnic = async (fitContent = false) => {
       if (!isBrokerConnected) return false;
       if (syncInFlightRef.current) return false;
+
+      const liveCandleIsFresh = Date.now() - lastRealtimeCandleAtRef.current < LIVE_CANDLE_TTL_MS;
+      if (!fitContent && liveCandleIsFresh) {
+        return false;
+      }
+
       syncInFlightRef.current = true;
 
       try {

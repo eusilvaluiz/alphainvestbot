@@ -537,11 +537,15 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
 
       derivedChannel.subscribe((message: Ably.Message) => {
+        console.log("[Ably tick raw]", typeof message.data, message.data);
         const tick = parseRealtimeTick(message.data);
+        console.log("[Ably tick parsed]", tick);
         if (!tick || isDisposed) return;
 
         const price = tick.closePrice;
         const candleTime = tick.timestamp - (tick.timestamp % 60); // floor to minute
+        const lastTime = lastCandleRef.current?.time as number | undefined;
+        console.log("[Ably] price=", price, "candleTime=", candleTime, "lastCandleTime=", lastTime);
 
         // Update price display immediately
         setCurrentPrice(price);

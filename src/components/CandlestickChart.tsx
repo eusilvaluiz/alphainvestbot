@@ -126,7 +126,7 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest |
 const BRAND_URL = "unicbroker.com";
 const INITIAL_HISTORY_COUNTBACK = 300;
 const LIVE_HISTORY_COUNTBACK = 10;
-const LIVE_MIRROR_INTERVAL_MS = 5000;
+const LIVE_MIRROR_INTERVAL_MS = 1000;
 
 
 const parseNumber = (value: unknown) => {
@@ -475,6 +475,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
     // Track whether the active candle is being driven by realtime ticks
     let activeTickBucket: number | null = null;
+    let lastRealtimeTickAt = 0;
 
     const getMinuteBucket = (timestamp: number) => Math.floor(timestamp / 60) * 60;
 
@@ -538,6 +539,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       if (!current) {
         const seedOpen = tick.open ?? tick.close;
         activeTickBucket = bucket;
+        lastRealtimeTickAt = Date.now();
         applyLiveCandleUpdate({
           time: bucket as any,
           open: seedOpen,
@@ -551,8 +553,9 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       const currentTime = Number(current.time);
       if (bucket < currentTime) return;
 
-      const isNewMinute = bucket > currentTime;      
+      const isNewMinute = bucket > currentTime;
       activeTickBucket = bucket;
+      lastRealtimeTickAt = Date.now();
 
       const nextOpen = isNewMinute ? (tick.open ?? current.close) : current.open;
       const nextHighBase = isNewMinute ? nextOpen : current.high;
@@ -596,31 +599,31 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
         setDataSource("unic");
         const sortedIncoming = sortCandles(unicData);
+        const latestSnapshot = sortedIncoming[sortedIncoming.length - 1];
+        const latestSnapshotTime = Number(latestSnapshot.time);
 
         if (fitContent || candleDataRef.current.length === 0) {
           applyChartData(sortedIncoming.slice(-INITIAL_HISTORY_COUNTBACK), fitContent);
-          activeTickBucket = null;
+          activeTickBucket = latestSnapshotTime;
         } else {
-          // Only merge CLOSED candles from UDF — never overwrite the active candle
-          // that is being driven by realtime ticks.
-          const currentBucket = activeTickBucket ?? getMinuteBucket(Math.floor(Date.now() / 1000));
-          const closedCandles = sortedIncoming.filter(c => Number(c.time) < currentBucket);
-          
-          if (closedCandles.length > 0) {
-            const merged = mergeCandles(candleDataRef.current, closedCandles);
-            // Preserve the active candle from candleDataRef if it exists
-            const activeLast = candleDataRef.current[candleDataRef.current.length - 1];
-            if (activeLast && Number(activeLast.time) >= currentBucket) {
-              // Re-append the active candle so it doesn't get lost
-              const withoutActive = merged.filter(c => Number(c.time) < currentBucket);
-              const finalCandles = [...withoutActive, activeLast];
-              candleDataRef.current = finalCandles;
-              series.setData(finalCandles as any);
-              applyLastCandleMeta(activeLast);
-            } else {
-              applyChartData(merged, false);
-            }
+          const closedCandles = sortedIncoming.slice(0, -1);
+          const currentActive = candleDataRef.current[candleDataRef.current.length - 1] ?? null;
+          const currentActiveTime = currentActive ? Number(currentActive.time) : null;
+          const hasFreshRealtime =
+            currentActiveTime === latestSnapshotTime &&
+            activeTickBucket === latestSnapshotTime &&
+            Date.now() - lastRealtimeTickAt < 2000;
+
+          let nextCandles = mergeCandles(candleDataRef.current, closedCandles);
+          nextCandles = hasFreshRealtime && currentActive
+            ? mergeCandles(nextCandles, [currentActive])
+            : mergeCandles(nextCandles, [latestSnapshot]);
+
+          if (!hasFreshRealtime) {
+            activeTickBucket = latestSnapshotTime;
           }
+
+          applyChartData(nextCandles, false);
         }
 
         return true;

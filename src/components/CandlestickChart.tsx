@@ -449,22 +449,40 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     chartRef.current = chart;
     seriesRef.current = series;
 
-    const applyHistoricalData = (candles: ChartCandle[], fitContent = false) => {
+    const applyHistoricalData = (candles: ChartCandle[], fitContent = false, preserveLiveCandle = false) => {
       if (isDisposed || candles.length === 0) return;
 
-      series.setData(candles as any);
+      const liveCandleIsFresh = Date.now() - lastRealtimeCandleAtRef.current < LIVE_CANDLE_TTL_MS;
+      const mergedCandles = [...candles];
+
+      if (preserveLiveCandle && liveCandleIsFresh && lastCandleRef.current) {
+        const liveCandle = lastCandleRef.current;
+        const lastHistorical = mergedCandles[mergedCandles.length - 1];
+
+        if (lastHistorical && Number(lastHistorical.time) === Number(liveCandle.time)) {
+          mergedCandles[mergedCandles.length - 1] = {
+            time: liveCandle.time,
+            open: liveCandle.open,
+            high: Math.max(lastHistorical.high, liveCandle.high),
+            low: Math.min(lastHistorical.low, liveCandle.low),
+            close: liveCandle.close,
+          };
+        }
+      }
+
+      series.setData(mergedCandles as any);
       if (fitContent) {
         chart.timeScale().fitContent();
       }
 
-      const last = candles[candles.length - 1];
+      const last = mergedCandles[mergedCandles.length - 1];
       lastCandleRef.current = last;
       setCurrentPrice(last.close);
       onPriceUpdate?.(last.close);
       setStats({
-        open: candles[0].open,
-        high: Math.max(...candles.map((d) => d.high)),
-        low: Math.min(...candles.map((d) => d.low)),
+        open: mergedCandles[0].open,
+        high: Math.max(...mergedCandles.map((d) => d.high)),
+        low: Math.min(...mergedCandles.map((d) => d.low)),
       });
     };
 

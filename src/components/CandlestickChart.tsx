@@ -405,6 +405,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     let syncInterval: number | null = null;
 
     lastCandleRef.current = null;
+    lastRealtimeCandleAtRef.current = 0;
     entryLinesRef.current.clear();
     syncInFlightRef.current = false;
     

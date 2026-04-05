@@ -383,7 +383,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     lastCandleRef.current = null;
     entryLinesRef.current.clear();
     syncInFlightRef.current = false;
-    lastRealtimeSyncAtRef.current = 0;
+    
     
     setRealtimeStatus("disconnected");
 

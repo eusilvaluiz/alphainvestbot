@@ -125,8 +125,8 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest |
 
 const BRAND_URL = "unicbroker.com";
 const INITIAL_HISTORY_COUNTBACK = 300;
-const LIVE_HISTORY_COUNTBACK = 5;
-const LIVE_MIRROR_INTERVAL_MS = 100;
+const LIVE_HISTORY_COUNTBACK = 10;
+const LIVE_MIRROR_INTERVAL_MS = 5000;
 
 
 const parseNumber = (value: unknown) => {
@@ -473,6 +473,9 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     chartRef.current = chart;
     seriesRef.current = series;
 
+    // Track whether the active candle is being driven by realtime ticks
+    let activeTickBucket: number | null = null;
+
     const getMinuteBucket = (timestamp: number) => Math.floor(timestamp / 60) * 60;
 
     const applyLastCandleMeta = (candle: ChartCandle) => {
@@ -534,6 +537,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
       if (!current) {
         const seedOpen = tick.open ?? tick.close;
+        activeTickBucket = bucket;
         applyLiveCandleUpdate({
           time: bucket as any,
           open: seedOpen,
@@ -547,7 +551,9 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       const currentTime = Number(current.time);
       if (bucket < currentTime) return;
 
-      const isNewMinute = bucket > currentTime;
+      const isNewMinute = bucket > currentTime;      
+      activeTickBucket = bucket;
+
       const nextOpen = isNewMinute ? (tick.open ?? current.close) : current.open;
       const nextHighBase = isNewMinute ? nextOpen : current.high;
       const nextLowBase = isNewMinute ? nextOpen : current.low;
@@ -590,16 +596,31 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
         setDataSource("unic");
         const sortedIncoming = sortCandles(unicData);
-        const lastIncoming = sortedIncoming[sortedIncoming.length - 1];
 
         if (fitContent || candleDataRef.current.length === 0) {
           applyChartData(sortedIncoming.slice(-INITIAL_HISTORY_COUNTBACK), fitContent);
+          activeTickBucket = null;
         } else {
-          const closedCandles = sortedIncoming.slice(0, -1);
+          // Only merge CLOSED candles from UDF — never overwrite the active candle
+          // that is being driven by realtime ticks.
+          const currentBucket = activeTickBucket ?? getMinuteBucket(Math.floor(Date.now() / 1000));
+          const closedCandles = sortedIncoming.filter(c => Number(c.time) < currentBucket);
+          
           if (closedCandles.length > 0) {
-            applyChartData(mergeCandles(candleDataRef.current, closedCandles), false);
+            const merged = mergeCandles(candleDataRef.current, closedCandles);
+            // Preserve the active candle from candleDataRef if it exists
+            const activeLast = candleDataRef.current[candleDataRef.current.length - 1];
+            if (activeLast && Number(activeLast.time) >= currentBucket) {
+              // Re-append the active candle so it doesn't get lost
+              const withoutActive = merged.filter(c => Number(c.time) < currentBucket);
+              const finalCandles = [...withoutActive, activeLast];
+              candleDataRef.current = finalCandles;
+              series.setData(finalCandles as any);
+              applyLastCandleMeta(activeLast);
+            } else {
+              applyChartData(merged, false);
+            }
           }
-          applyLiveCandleUpdate(lastIncoming);
         }
 
         return true;
@@ -716,7 +737,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         if (!tick || isDisposed) return;
 
         applyRealtimeTickToCurrentCandle(tick);
-        void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK, force: true });
       });
 
       ablyClientRef.current = client;

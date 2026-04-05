@@ -33,6 +33,14 @@ type ChartCandle = {
   close: number;
 };
 
+type RealtimeTick = {
+  timestamp: number;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number;
+};
+
 // Client-side session cookie cache
 let cachedSessionCookies: string | null = null;
 
@@ -154,7 +162,7 @@ const mergeCandles = (base: ChartCandle[], incoming: ChartCandle[]) => {
   return sortCandles(Array.from(mergedByTime.values())).slice(-INITIAL_HISTORY_COUNTBACK);
 };
 
-const parseRealtimeTick = (input: unknown): { timestamp: number; open: number | null; high: number | null; low: number | null; close: number } | null => {
+const parseRealtimeTick = (input: unknown): RealtimeTick | null => {
   const parsed = parseJsonSafely(input);
 
   if (!parsed || typeof parsed !== "object") return null;
@@ -465,6 +473,19 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     chartRef.current = chart;
     seriesRef.current = series;
 
+    const getMinuteBucket = (timestamp: number) => Math.floor(timestamp / 60) * 60;
+
+    const applyLastCandleMeta = (candle: ChartCandle) => {
+      lastCandleRef.current = candle;
+      setCurrentPrice(candle.close);
+      onPriceUpdate?.(candle.close);
+      setStats({
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+      });
+    };
+
     const applyChartData = (candles: ChartCandle[], fitContent = false) => {
       if (isDisposed || candles.length === 0) return;
 
@@ -474,14 +495,69 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         chart.timeScale().fitContent();
       }
 
-      const last = candles[candles.length - 1];
-      lastCandleRef.current = last;
-      setCurrentPrice(last.close);
-      onPriceUpdate?.(last.close);
-      setStats({
-        open: candles[0].open,
-        high: Math.max(...candles.map((d) => d.high)),
-        low: Math.min(...candles.map((d) => d.low)),
+      applyLastCandleMeta(candles[candles.length - 1]);
+    };
+
+    const applyLiveCandleUpdate = (incoming: ChartCandle) => {
+      if (isDisposed) return;
+
+      const current = candleDataRef.current;
+      let nextCandles: ChartCandle[];
+
+      if (current.length === 0) {
+        nextCandles = [incoming];
+        series.setData(nextCandles as any);
+      } else {
+        const last = current[current.length - 1];
+        const incomingTime = Number(incoming.time);
+        const lastTime = Number(last.time);
+
+        if (incomingTime < lastTime) {
+          nextCandles = mergeCandles(current, [incoming]);
+          series.setData(nextCandles as any);
+        } else if (incomingTime === lastTime) {
+          nextCandles = [...current.slice(0, -1), incoming];
+          series.update(incoming as any);
+        } else {
+          nextCandles = [...current, incoming].slice(-INITIAL_HISTORY_COUNTBACK);
+          series.update(incoming as any);
+        }
+      }
+
+      candleDataRef.current = nextCandles;
+      applyLastCandleMeta(nextCandles[nextCandles.length - 1]);
+    };
+
+    const applyRealtimeTickToCurrentCandle = (tick: RealtimeTick) => {
+      const bucket = getMinuteBucket(tick.timestamp);
+      const current = lastCandleRef.current;
+
+      if (!current) {
+        const seedOpen = tick.open ?? tick.close;
+        applyLiveCandleUpdate({
+          time: bucket as any,
+          open: seedOpen,
+          high: tick.high ?? Math.max(seedOpen, tick.close),
+          low: tick.low ?? Math.min(seedOpen, tick.close),
+          close: tick.close,
+        });
+        return;
+      }
+
+      const currentTime = Number(current.time);
+      if (bucket < currentTime) return;
+
+      const isNewMinute = bucket > currentTime;
+      const nextOpen = isNewMinute ? (tick.open ?? current.close) : current.open;
+      const nextHighBase = isNewMinute ? nextOpen : current.high;
+      const nextLowBase = isNewMinute ? nextOpen : current.low;
+
+      applyLiveCandleUpdate({
+        time: bucket as any,
+        open: nextOpen,
+        high: tick.high ?? Math.max(nextHighBase, tick.close, tick.open ?? nextOpen),
+        low: tick.low ?? Math.min(nextLowBase, tick.close, tick.open ?? nextOpen),
+        close: tick.close,
       });
     };
 
@@ -514,11 +590,18 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
         setDataSource("unic");
         const sortedIncoming = sortCandles(unicData);
-        const nextCandles = fitContent || candleDataRef.current.length === 0
-          ? sortedIncoming.slice(-INITIAL_HISTORY_COUNTBACK)
-          : mergeCandles(candleDataRef.current, sortedIncoming);
+        const lastIncoming = sortedIncoming[sortedIncoming.length - 1];
 
-        applyChartData(nextCandles, fitContent);
+        if (fitContent || candleDataRef.current.length === 0) {
+          applyChartData(sortedIncoming.slice(-INITIAL_HISTORY_COUNTBACK), fitContent);
+        } else {
+          const closedCandles = sortedIncoming.slice(0, -1);
+          if (closedCandles.length > 0) {
+            applyChartData(mergeCandles(candleDataRef.current, closedCandles), false);
+          }
+          applyLiveCandleUpdate(lastIncoming);
+        }
+
         return true;
       } finally {
         syncInFlightRef.current = false;
@@ -632,6 +715,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         const tick = parseRealtimeTick(message.data);
         if (!tick || isDisposed) return;
 
+        applyRealtimeTickToCurrentCandle(tick);
         void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK, force: true });
       });
 

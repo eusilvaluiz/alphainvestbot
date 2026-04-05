@@ -84,7 +84,7 @@ async function fetchUnicCandles(symbol: string, countback = 300) {
   }
 }
 
-async function fetchAblyToken(): Promise<Ably.TokenDetails | null> {
+async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest | null> {
   try {
     const stored = localStorage.getItem("broker_credentials");
     if (!stored) return null;
@@ -95,9 +95,22 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | null> {
       body: { broker_user: user, broker_pass: pass },
     });
 
-    if (error || !data?.token) return null;
-    return data as Ably.TokenDetails;
-  } catch {
+    if (error || !data) {
+      console.error("[Ably] fetchAblyToken error:", error, data);
+      return null;
+    }
+
+    console.log("[Ably] Token response keys:", Object.keys(data));
+
+    // Accept both TokenDetails (has .token) and TokenRequest (has .keyName + .mac)
+    if (data.token || (data.keyName && data.mac) || data.issued) {
+      return data;
+    }
+
+    console.error("[Ably] Unrecognized token format:", data);
+    return null;
+  } catch (e) {
+    console.error("[Ably] fetchAblyToken exception:", e);
     return null;
   }
 }

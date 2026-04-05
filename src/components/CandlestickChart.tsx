@@ -117,6 +117,7 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest |
 
 const BRAND_URL = "unicbroker.com";
 const HISTORICAL_SYNC_INTERVAL_MS = 10000;
+const LIVE_CANDLE_TTL_MS = 90_000;
 
 
 const parseNumber = (value: unknown) => {
@@ -333,6 +334,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const entryLinesRef = useRef<Map<number, any>>(new Map());
   const lastCandleRef = useRef<ChartCandle | null>(null);
+  const lastRealtimeCandleAtRef = useRef<number>(0);
   const ablyClientRef = useRef<Ably.Realtime | null>(null);
   const syncInFlightRef = useRef(false);
   
@@ -403,6 +405,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     let syncInterval: number | null = null;
 
     lastCandleRef.current = null;
+    lastRealtimeCandleAtRef.current = 0;
     entryLinesRef.current.clear();
     syncInFlightRef.current = false;
     
@@ -446,22 +449,40 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     chartRef.current = chart;
     seriesRef.current = series;
 
-    const applyHistoricalData = (candles: ChartCandle[], fitContent = false) => {
+    const applyHistoricalData = (candles: ChartCandle[], fitContent = false, preserveLiveCandle = false) => {
       if (isDisposed || candles.length === 0) return;
 
-      series.setData(candles as any);
+      const liveCandleIsFresh = Date.now() - lastRealtimeCandleAtRef.current < LIVE_CANDLE_TTL_MS;
+      const mergedCandles = [...candles];
+
+      if (preserveLiveCandle && liveCandleIsFresh && lastCandleRef.current) {
+        const liveCandle = lastCandleRef.current;
+        const lastHistorical = mergedCandles[mergedCandles.length - 1];
+
+        if (lastHistorical && Number(lastHistorical.time) === Number(liveCandle.time)) {
+          mergedCandles[mergedCandles.length - 1] = {
+            time: liveCandle.time,
+            open: liveCandle.open,
+            high: Math.max(lastHistorical.high, liveCandle.high),
+            low: Math.min(lastHistorical.low, liveCandle.low),
+            close: liveCandle.close,
+          };
+        }
+      }
+
+      series.setData(mergedCandles as any);
       if (fitContent) {
         chart.timeScale().fitContent();
       }
 
-      const last = candles[candles.length - 1];
+      const last = mergedCandles[mergedCandles.length - 1];
       lastCandleRef.current = last;
       setCurrentPrice(last.close);
       onPriceUpdate?.(last.close);
       setStats({
-        open: candles[0].open,
-        high: Math.max(...candles.map((d) => d.high)),
-        low: Math.min(...candles.map((d) => d.low)),
+        open: mergedCandles[0].open,
+        high: Math.max(...mergedCandles.map((d) => d.high)),
+        low: Math.min(...mergedCandles.map((d) => d.low)),
       });
     };
 
@@ -475,7 +496,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         if (!unicData || unicData.length === 0 || isDisposed) return false;
 
         setDataSource("unic");
-        applyHistoricalData(unicData, fitContent);
+        applyHistoricalData(unicData, fitContent, !fitContent);
         return true;
       } finally {
         syncInFlightRef.current = false;
@@ -570,15 +591,10 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
 
       derivedChannel.subscribe((message: Ably.Message) => {
-        console.log("[Ably tick raw]", typeof message.data, message.data);
         const tick = parseRealtimeTick(message.data);
-        console.log("[Ably tick parsed]", tick);
         if (!tick || isDisposed) return;
 
         const candleTime = tick.timestamp - (tick.timestamp % 60);
-        const lastTime = lastCandleRef.current?.time as number | undefined;
-        console.log("[Ably] close=", tick.close, "candleTime=", candleTime, "lastCandleTime=", lastTime);
-
         setCurrentPrice(tick.close);
         onPriceUpdate?.(tick.close);
 
@@ -592,6 +608,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
               low: tick.low ?? Math.min(last.low, tick.close),
               close: tick.close,
             };
+            lastRealtimeCandleAtRef.current = Date.now();
             lastCandleRef.current = updated;
             seriesRef.current.update(updated as any);
           } else if (candleTime > (last.time as number)) {
@@ -602,6 +619,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
               low: tick.low ?? tick.close,
               close: tick.close,
             };
+            lastRealtimeCandleAtRef.current = Date.now();
             lastCandleRef.current = newCandle;
             seriesRef.current.update(newCandle as any);
             void syncFromUnic();

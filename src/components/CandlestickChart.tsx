@@ -117,6 +117,7 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest |
 
 const BRAND_URL = "unicbroker.com";
 const HISTORICAL_SYNC_INTERVAL_MS = 10000;
+const LIVE_CANDLE_TTL_MS = 90_000;
 
 
 const parseNumber = (value: unknown) => {

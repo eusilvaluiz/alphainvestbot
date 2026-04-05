@@ -496,7 +496,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         if (!unicData || unicData.length === 0 || isDisposed) return false;
 
         setDataSource("unic");
-        applyHistoricalData(unicData, fitContent);
+        applyHistoricalData(unicData, fitContent, !fitContent);
         return true;
       } finally {
         syncInFlightRef.current = false;

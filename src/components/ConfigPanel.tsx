@@ -257,7 +257,7 @@ const ConfigPanel = ({
               type="text"
               inputMode="numeric"
               value={stopLoss}
-              onChange={(e) => setStopLoss(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0)}
+              onChange={(e) => { setStopLoss(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0); setIsSaved(false); }}
               disabled={isRunning}
               className="w-full pl-8 pr-3 py-2 rounded-lg bg-secondary border border-border text-base sm:text-xs font-bold text-chart-red outline-none focus:border-chart-red/50 transition-colors disabled:opacity-50"
             />

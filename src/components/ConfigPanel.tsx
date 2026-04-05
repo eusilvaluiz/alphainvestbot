@@ -278,16 +278,24 @@ const ConfigPanel = ({
         <div className="flex gap-2">
           <button
             onClick={handleSave}
-            disabled={!isLoggedIn || saving}
-            className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            disabled={!isLoggedIn || saving || isSaved}
+            className={`flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-xs font-medium transition-colors disabled:opacity-50 ${
+              isSaved
+                ? "bg-secondary text-muted-foreground cursor-default"
+                : "bg-gradient-to-r from-chart-green to-emerald-500 text-white shadow-lg shadow-chart-green/20 hover:shadow-chart-green/40"
+            }`}
           >
             <Save size={14} />
-            {saving ? "..." : "Salvar"}
+            {saving ? "..." : isSaved ? "Salvo" : "Salvar"}
           </button>
           <button
             onClick={handleStart}
             disabled={!isLoggedIn}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-heading font-bold text-sm uppercase tracking-wider bg-gradient-to-r from-chart-green to-emerald-500 text-white shadow-lg shadow-chart-green/20 hover:shadow-chart-green/40 transition-all duration-300 disabled:opacity-50"
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-heading font-bold text-sm uppercase tracking-wider transition-all duration-300 disabled:opacity-50 ${
+              isSaved
+                ? "bg-gradient-to-r from-chart-green to-emerald-500 text-white shadow-lg shadow-chart-green/20 hover:shadow-chart-green/40"
+                : "bg-secondary text-muted-foreground"
+            }`}
           >
             <Play size={16} />
             {isLoggedIn ? "Iniciar Bot" : "Login Necessário"}

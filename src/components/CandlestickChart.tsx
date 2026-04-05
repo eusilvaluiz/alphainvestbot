@@ -118,8 +118,8 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest |
 const BRAND_URL = "unicbroker.com";
 const INITIAL_HISTORY_COUNTBACK = 300;
 const LIVE_HISTORY_COUNTBACK = 5;
-const LIVE_MIRROR_INTERVAL_MS = 250;
-const LIVE_SYNC_DEBOUNCE_MS = 150;
+const LIVE_MIRROR_INTERVAL_MS = 500;
+const LIVE_SYNC_DEBOUNCE_MS = 120;
 
 
 const parseNumber = (value: unknown) => {
@@ -186,6 +186,8 @@ const parseRealtimeTick = (input: unknown): { timestamp: number; open: number | 
 
   return null;
 };
+
+const getMinuteBucket = (timestamp: number) => Math.floor(timestamp / 60) * 60;
 
 /* ── Category mapping ── */
 const CATEGORY_TABS = [

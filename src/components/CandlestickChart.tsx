@@ -104,7 +104,7 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | null> {
 
 const BRAND_URL = "unicbroker.com";
 const HISTORICAL_SYNC_INTERVAL_MS = 5000;
-const REALTIME_SYNC_DEBOUNCE_MS = 700;
+
 
 const parseNumber = (value: unknown) => {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -313,7 +313,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
   const lastCandleRef = useRef<ChartCandle | null>(null);
   const ablyClientRef = useRef<Ably.Realtime | null>(null);
   const syncInFlightRef = useRef(false);
-  const lastRealtimeSyncAtRef = useRef(0);
+  
   
   const [currentPrice, setCurrentPrice] = useState(0);
   const [stats, setStats] = useState({ open: 0, high: 0, low: 0 });
@@ -383,7 +383,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     lastCandleRef.current = null;
     entryLinesRef.current.clear();
     syncInFlightRef.current = false;
-    lastRealtimeSyncAtRef.current = 0;
+    
     
     setRealtimeStatus("disconnected");
 
@@ -538,14 +538,42 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
 
       derivedChannel.subscribe((message: Ably.Message) => {
         const tick = parseRealtimeTick(message.data);
-        if (tick) {
-          const now = Date.now();
-          if (now - lastRealtimeSyncAtRef.current < REALTIME_SYNC_DEBOUNCE_MS) {
-            return;
-          }
+        if (!tick || isDisposed) return;
 
-          lastRealtimeSyncAtRef.current = now;
-          void syncFromUnic();
+        const price = tick.closePrice;
+        const candleTime = tick.timestamp - (tick.timestamp % 60); // floor to minute
+
+        // Update price display immediately
+        setCurrentPrice(price);
+        onPriceUpdate?.(price);
+
+        const last = lastCandleRef.current;
+        if (last && seriesRef.current) {
+          if (candleTime === (last.time as number)) {
+            // Same candle — update close/high/low in place
+            const updated: ChartCandle = {
+              ...last,
+              close: price,
+              high: Math.max(last.high, price),
+              low: Math.min(last.low, price),
+            };
+            lastCandleRef.current = updated;
+            seriesRef.current.update(updated as any);
+          } else if (candleTime > (last.time as number)) {
+            // New candle started
+            const newCandle: ChartCandle = {
+              time: candleTime as any,
+              open: price,
+              high: price,
+              low: price,
+              close: price,
+            };
+            lastCandleRef.current = newCandle;
+            seriesRef.current.update(newCandle as any);
+
+            // Trigger a historical sync to backfill the completed candle properly
+            void syncFromUnic();
+          }
         }
       });
 

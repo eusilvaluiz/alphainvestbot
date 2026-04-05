@@ -139,17 +139,26 @@ const parseJsonSafely = (value: unknown) => {
 
 const toUnixSeconds = (value: number) => (value > 1_000_000_000_000 ? Math.floor(value / 1000) : Math.floor(value));
 
-const parseRealtimeTick = (input: unknown): { closePrice: number; timestamp: number } | null => {
+const parseRealtimeTick = (input: unknown): { timestamp: number; open: number | null; high: number | null; low: number | null; close: number } | null => {
   const parsed = parseJsonSafely(input);
 
   if (!parsed || typeof parsed !== "object") return null;
 
   const record = parsed as Record<string, unknown>;
-  const closePrice = parseNumber(record.close ?? record.c ?? record.price ?? record.last_price ?? record.value);
+  const open = parseNumber(record.open ?? record.o);
+  const high = parseNumber(record.high ?? record.h);
+  const low = parseNumber(record.low ?? record.l);
+  const close = parseNumber(record.close ?? record.c ?? record.price ?? record.last_price ?? record.value);
   const timestamp = parseNumber(record.time ?? record.t ?? record.timestamp ?? record.ts ?? record.updated_at);
 
-  if (closePrice !== null && timestamp !== null) {
-    return { closePrice, timestamp: toUnixSeconds(timestamp) };
+  if (close !== null && timestamp !== null) {
+    return {
+      close,
+      timestamp: toUnixSeconds(timestamp),
+      open,
+      high,
+      low,
+    };
   }
 
   for (const key of ["data", "payload", "tick", "message"]) {
@@ -566,40 +575,35 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         console.log("[Ably tick parsed]", tick);
         if (!tick || isDisposed) return;
 
-        const price = tick.closePrice;
-        const candleTime = tick.timestamp - (tick.timestamp % 60); // floor to minute
+        const candleTime = tick.timestamp - (tick.timestamp % 60);
         const lastTime = lastCandleRef.current?.time as number | undefined;
-        console.log("[Ably] price=", price, "candleTime=", candleTime, "lastCandleTime=", lastTime);
+        console.log("[Ably] close=", tick.close, "candleTime=", candleTime, "lastCandleTime=", lastTime);
 
-        // Update price display immediately
-        setCurrentPrice(price);
-        onPriceUpdate?.(price);
+        setCurrentPrice(tick.close);
+        onPriceUpdate?.(tick.close);
 
         const last = lastCandleRef.current;
         if (last && seriesRef.current) {
           if (candleTime === (last.time as number)) {
-            // Same candle — update close/high/low in place
             const updated: ChartCandle = {
-              ...last,
-              close: price,
-              high: Math.max(last.high, price),
-              low: Math.min(last.low, price),
+              time: last.time,
+              open: tick.open ?? last.open,
+              high: tick.high ?? Math.max(last.high, tick.close),
+              low: tick.low ?? Math.min(last.low, tick.close),
+              close: tick.close,
             };
             lastCandleRef.current = updated;
             seriesRef.current.update(updated as any);
           } else if (candleTime > (last.time as number)) {
-            // New candle started
             const newCandle: ChartCandle = {
               time: candleTime as any,
-              open: price,
-              high: price,
-              low: price,
-              close: price,
+              open: tick.open ?? tick.close,
+              high: tick.high ?? tick.close,
+              low: tick.low ?? tick.close,
+              close: tick.close,
             };
             lastCandleRef.current = newCandle;
             seriesRef.current.update(newCandle as any);
-
-            // Trigger a historical sync to backfill the completed candle properly
             void syncFromUnic();
           }
         }

@@ -116,7 +116,7 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest |
 }
 
 const BRAND_URL = "unicbroker.com";
-const HISTORICAL_SYNC_INTERVAL_MS = 10000;
+const HISTORICAL_SYNC_INTERVAL_MS = 30000;
 const LIVE_CANDLE_TTL_MS = 90_000;
 
 
@@ -493,6 +493,12 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     const syncFromUnic = async (fitContent = false) => {
       if (!isBrokerConnected) return false;
       if (syncInFlightRef.current) return false;
+
+      const liveCandleIsFresh = Date.now() - lastRealtimeCandleAtRef.current < LIVE_CANDLE_TTL_MS;
+      if (!fitContent && liveCandleIsFresh) {
+        return false;
+      }
+
       syncInFlightRef.current = true;
 
       try {
@@ -626,7 +632,6 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
             lastRealtimeCandleAtRef.current = Date.now();
             lastCandleRef.current = newCandle;
             seriesRef.current.update(newCandle as any);
-            void syncFromUnic();
           }
         }
       });

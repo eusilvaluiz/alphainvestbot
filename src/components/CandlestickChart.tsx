@@ -525,6 +525,49 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
     };
 
+    const applyRealtimeTickToCurrentCandle = (tick: { timestamp: number; open: number | null; high: number | null; low: number | null; close: number }) => {
+      if (isDisposed || candleDataRef.current.length === 0) return;
+
+      const currentLast = lastCandleRef.current;
+      if (!currentLast) return;
+
+      const currentBucket = getMinuteBucket(Number(currentLast.time));
+      const tickBucket = getMinuteBucket(tick.timestamp);
+
+      if (tickBucket < currentBucket) return;
+
+      const nextCandle: ChartCandle = tickBucket > currentBucket
+        ? {
+            time: tickBucket as any,
+            open: tick.open ?? currentLast.close,
+            high: tick.high ?? Math.max(tick.close, tick.open ?? currentLast.close),
+            low: tick.low ?? Math.min(tick.close, tick.open ?? currentLast.close),
+            close: tick.close,
+          }
+        : {
+            time: currentLast.time,
+            open: tick.open ?? currentLast.open,
+            high: tick.high ?? Math.max(currentLast.high, tick.close, tick.open ?? currentLast.open),
+            low: tick.low ?? Math.min(currentLast.low, tick.close, tick.open ?? currentLast.open),
+            close: tick.close,
+          };
+
+      const nextCandles = tickBucket > currentBucket
+        ? [...candleDataRef.current, nextCandle].slice(-INITIAL_HISTORY_COUNTBACK)
+        : candleDataRef.current.map((candle, index, arr) => index === arr.length - 1 ? nextCandle : candle);
+
+      candleDataRef.current = nextCandles;
+      lastCandleRef.current = nextCandle;
+      series.update(nextCandle as any);
+      setCurrentPrice(nextCandle.close);
+      onPriceUpdate?.(nextCandle.close);
+      setStats({
+        open: nextCandle.open,
+        high: nextCandle.high,
+        low: nextCandle.low,
+      });
+    };
+
     const queueNextSync = () => {
       if (isDisposed) return;
       pendingSyncRef.current = true;
@@ -675,6 +718,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         const tick = parseRealtimeTick(message.data);
         if (!tick || isDisposed) return;
 
+        applyRealtimeTickToCurrentCandle(tick);
         void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK, force: true });
       });
 

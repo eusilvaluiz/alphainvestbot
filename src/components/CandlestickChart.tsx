@@ -118,7 +118,8 @@ async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest |
 const BRAND_URL = "unicbroker.com";
 const INITIAL_HISTORY_COUNTBACK = 300;
 const LIVE_HISTORY_COUNTBACK = 5;
-const LIVE_MIRROR_INTERVAL_MS = 1000;
+const LIVE_MIRROR_INTERVAL_MS = 250;
+const LIVE_SYNC_DEBOUNCE_MS = 150;
 
 
 const parseNumber = (value: unknown) => {
@@ -350,6 +351,8 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
   const candleDataRef = useRef<ChartCandle[]>([]);
   const lastCandleRef = useRef<ChartCandle | null>(null);
   const lastMirrorSyncStartedAtRef = useRef<number>(0);
+  const lastAppliedLiveSyncAtRef = useRef<number>(0);
+  const pendingSyncRef = useRef(false);
   const ablyClientRef = useRef<Ably.Realtime | null>(null);
   const syncInFlightRef = useRef(false);
   
@@ -422,6 +425,8 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
     lastCandleRef.current = null;
     candleDataRef.current = [];
     lastMirrorSyncStartedAtRef.current = 0;
+    lastAppliedLiveSyncAtRef.current = 0;
+    pendingSyncRef.current = false;
     entryLinesRef.current.clear();
     syncInFlightRef.current = false;
     
@@ -485,14 +490,42 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       });
     };
 
-    const mergeLiveSnapshot = (candles: ChartCandle[]) => {
-      if (candles.length === 0) return;
+    const applyLiveUpdate = (candles: ChartCandle[]) => {
+      if (candles.length === 0 || isDisposed) return;
 
-      const nextCandles = candleDataRef.current.length === 0
-        ? sortCandles(candles).slice(-INITIAL_HISTORY_COUNTBACK)
-        : mergeCandles(candleDataRef.current, candles);
+      const sortedIncoming = sortCandles(candles);
+      const incomingLast = sortedIncoming[sortedIncoming.length - 1];
+      const currentLast = lastCandleRef.current;
 
-      applyChartData(nextCandles);
+      if (!currentLast || candleDataRef.current.length === 0) {
+        applyChartData(sortedIncoming.slice(-INITIAL_HISTORY_COUNTBACK));
+        return;
+      }
+
+      const hasBoundaryShift = Number(incomingLast.time) !== Number(currentLast.time);
+      if (hasBoundaryShift) {
+        applyChartData(mergeCandles(candleDataRef.current, sortedIncoming));
+        return;
+      }
+
+      const base = [...candleDataRef.current];
+      const lastIndex = base.length - 1;
+      base[lastIndex] = incomingLast;
+      candleDataRef.current = base;
+      lastCandleRef.current = incomingLast;
+      series.update(incomingLast as any);
+      setCurrentPrice(incomingLast.close);
+      onPriceUpdate?.(incomingLast.close);
+      setStats({
+        open: incomingLast.open,
+        high: incomingLast.high,
+        low: incomingLast.low,
+      });
+    };
+
+    const queueNextSync = () => {
+      if (isDisposed) return;
+      pendingSyncRef.current = true;
     };
 
     const syncFromUnic = async ({
@@ -505,10 +538,16 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       force?: boolean;
     } = {}) => {
       if (!isBrokerConnected) return false;
-      if (syncInFlightRef.current) return false;
 
       const now = Date.now();
-      if (!fitContent && !force && now - lastMirrorSyncStartedAtRef.current < LIVE_MIRROR_INTERVAL_MS - 100) {
+      const minDelay = fitContent || force ? 0 : LIVE_SYNC_DEBOUNCE_MS;
+
+      if (syncInFlightRef.current) {
+        queueNextSync();
+        return false;
+      }
+
+      if (!fitContent && !force && now - lastAppliedLiveSyncAtRef.current < minDelay) {
         return false;
       }
 
@@ -523,11 +562,19 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         if (fitContent || candleDataRef.current.length === 0) {
           applyChartData(sortCandles(unicData).slice(-INITIAL_HISTORY_COUNTBACK), fitContent);
         } else {
-          mergeLiveSnapshot(unicData);
+          applyLiveUpdate(unicData);
         }
+        lastAppliedLiveSyncAtRef.current = Date.now();
         return true;
       } finally {
         syncInFlightRef.current = false;
+
+        if (pendingSyncRef.current && !isDisposed) {
+          pendingSyncRef.current = false;
+          window.setTimeout(() => {
+            void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK, force: true });
+          }, 0);
+        }
       }
     };
 
@@ -561,7 +608,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
       if (!isBrokerConnected) return;
 
       syncInterval = window.setInterval(() => {
-        void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK });
+        void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK, force: true });
       }, LIVE_MIRROR_INTERVAL_MS);
     };
 
@@ -626,7 +673,7 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         const tick = parseRealtimeTick(message.data);
         if (!tick || isDisposed) return;
 
-        void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK });
+        void syncFromUnic({ countback: LIVE_HISTORY_COUNTBACK, force: true });
       });
 
       ablyClientRef.current = client;

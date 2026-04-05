@@ -214,8 +214,9 @@ const ConfigPanel = ({
               value={position}
               onChange={(e) => {
                 const raw = e.target.value.replace(/[^0-9]/g, "");
-                if (raw === "") { setPosition(0 as any); return; }
+                if (raw === "") { setPosition(0 as any); setIsSaved(false); return; }
                 setPosition(Math.min(10, Math.max(1, Number(raw))));
+                setIsSaved(false);
               }}
               onBlur={() => { if (!position || position < 1) setPosition(1); }}
               disabled={isRunning}

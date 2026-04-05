@@ -131,6 +131,7 @@ const ConfigPanel = ({
       }
 
       toast.success("Configuração salva");
+      setIsSaved(true);
     } catch (error: any) {
       toast.error(error?.message || "Erro ao salvar configuração");
     } finally {
@@ -138,8 +139,13 @@ const ConfigPanel = ({
     }
   };
 
-  const handleStart = () => onStart(buildConfig());
-
+  const handleStart = () => {
+    if (!isSaved) {
+      toast.warning("Salve as configurações acima antes de iniciar o Bot");
+      return;
+    }
+    onStart(buildConfig());
+  };
   const maxEntry = Math.max(balance || 1000, 1000);
   const maxStop = Math.max(balance * 2 || 5000, 5000);
 

@@ -459,7 +459,9 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
         const liveCandle = lastCandleRef.current;
         const lastHistorical = mergedCandles[mergedCandles.length - 1];
 
-        if (lastHistorical && Number(lastHistorical.time) === Number(liveCandle.time)) {
+        if (!lastHistorical) {
+          mergedCandles.push(liveCandle);
+        } else if (Number(lastHistorical.time) === Number(liveCandle.time)) {
           mergedCandles[mergedCandles.length - 1] = {
             time: liveCandle.time,
             open: liveCandle.open,
@@ -467,6 +469,8 @@ const CandlestickChart = ({ selectedSymbol, symbols, onSymbolChange, onPriceUpda
             low: Math.min(lastHistorical.low, liveCandle.low),
             close: liveCandle.close,
           };
+        } else if (Number(lastHistorical.time) < Number(liveCandle.time)) {
+          mergedCandles.push(liveCandle);
         }
       }
 

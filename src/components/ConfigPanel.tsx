@@ -51,6 +51,7 @@ const ConfigPanel = ({
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [martingaleEnabled, setMartingaleEnabled] = useState(true);
+  const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
     if (!user?.id || loaded) return;
